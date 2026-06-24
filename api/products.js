@@ -65,7 +65,7 @@ router.delete('/:id', asyncHandler((req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    if (err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+    if (err.message && err.message.includes('FOREIGN KEY constraint failed')) {
       return res.status(400).json({ error: 'لا يمكن حذف هذا الدواء لوجود كميات أو تشغيلات مرتبطة به بالمخزون.' });
     }
     throw err;

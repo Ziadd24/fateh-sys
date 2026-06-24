@@ -49,6 +49,7 @@ app.use('/api/stock',      require('./api/stock'));
 app.use('/api/alerts',     require('./api/alerts'));
 app.use('/api/movements',  require('./api/movements'));
 app.use('/api/inventory',  require('./api/inventory'));
+app.use('/api/reports',    require('./api/reports'));
 
 // ─── Error handler (must be last) ─────────────────────────────────────
 app.use(errorHandler);

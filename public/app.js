@@ -11,7 +11,8 @@ let state = {
   batches: [],
   inventory: [],
   sortCol: 'product_name',
-  sortAsc: true
+  sortAsc: true,
+  category: 'Pharmacy'
 };
 
 function showToast(message, type = 'success') {
@@ -39,6 +40,29 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   event.currentTarget.classList.add('active');
   $(`tab-${tabId}`).classList.add('active');
+}
+
+function switchCategory(category) {
+  state.category = category;
+  
+  // Toggle active class on switcher buttons
+  document.querySelectorAll('.category-btn').forEach(btn => {
+    if (btn.getAttribute('data-category') === category) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+  
+  // Update dashboards visibility
+  const pDbEl = $('pharmacy-dashboard');
+  const wDbEl = $('warehouse-dashboard');
+  
+  if (pDbEl) pDbEl.style.display = (category === 'Pharmacy') ? 'block' : 'none';
+  if (wDbEl) wDbEl.style.display = (category === 'Warehouse') ? 'block' : 'none';
+  
+  // Re-render inventory table to filter items matching the location type
+  renderInventoryTable();
 }
 
 async function api(path, options = {}) {
@@ -118,48 +142,104 @@ function renderDefinedBatches() {
 function populateDropdowns() {
   const locSelects = document.querySelectorAll('.select-location');
   const prodSelects = document.querySelectorAll('.select-product');
-  const batSelects = document.querySelectorAll('.select-batch');
+  const batSelects = document.querySelectorAll('.select-batch, .select-batch-required');
 
   const locOptions = `<option value="">اختر الفرع / الموقع</option>` + state.locations.map(l => `<option value="${l.location_id}">${l.name}</option>`).join('');
   const prodOptions = `<option value="">اختر الدواء</option>` + state.products.map(p => `<option value="${p.product_id}">${p.name} (${p.sku})</option>`).join('');
-  const batOptions = `<option value="">اختر التشغيلة</option>` + state.batches.map(b => `<option value="${b.batch_no}">${b.batch_no} (ينتهي ${b.expiry_date})</option>`).join('');
-
+  
   locSelects.forEach(s => s.innerHTML = locOptions);
   prodSelects.forEach(s => s.innerHTML = prodOptions);
-  batSelects.forEach(s => s.innerHTML = batOptions);
+
+  // Clear batch selects initially until a product is chosen
+  batSelects.forEach(s => {
+    s.innerHTML = s.classList.contains('select-batch-required') 
+      ? `<option value="">-- اختر التشغيلة --</option>`
+      : `<option value="">-- تلقائي (FIFO) --</option>`;
+  });
+
+  // Attach dynamic filter to product selects
+  document.querySelectorAll('form').forEach(form => {
+    const pSelect = form.querySelector('.select-product');
+    const bSelect = form.querySelector('.select-batch, .select-batch-required');
+    if (pSelect && bSelect) {
+      // Remove old listeners to avoid duplicates on re-render
+      pSelect.replaceWith(pSelect.cloneNode(true));
+      const newPSelect = form.querySelector('.select-product');
+      newPSelect.addEventListener('change', (e) => {
+        const pId = parseInt(e.target.value, 10);
+        const batches = state.batches.filter(b => b.product_id === pId);
+        const defaultOption = bSelect.classList.contains('select-batch-required') 
+          ? `<option value="">-- اختر التشغيلة --</option>`
+          : `<option value="">-- تلقائي (FIFO) --</option>`;
+        bSelect.innerHTML = defaultOption + batches.map(b => `<option value="${b.batch_no}">${b.batch_no} (ينتهي ${b.expiry_date})</option>`).join('');
+      });
+    }
+  });
+
+  const suppliers = state.locations.filter(l => l.type === 'Supplier');
+  const warehouses = state.locations.filter(l => l.type === 'Warehouse');
+  const pharmacies = state.locations.filter(l => l.type === 'Pharmacy');
+
+  const supOptions = `<option value="">اختر الشركة الموردة</option>` + suppliers.map(l => `<option value="${l.location_id}">${l.name}</option>`).join('');
+  const whOptions = `<option value="">اختر المستودع</option>` + warehouses.map(l => `<option value="${l.location_id}">${l.name}</option>`).join('');
+  const phOptions = `<option value="">اختر الصيدلية</option>` + pharmacies.map(l => `<option value="${l.location_id}">${l.name}</option>`).join('');
+
+  document.querySelectorAll('.select-supplier').forEach(s => s.innerHTML = supOptions);
+  document.querySelectorAll('.select-warehouse').forEach(s => s.innerHTML = whOptions);
+  document.querySelectorAll('.select-pharmacy').forEach(s => s.innerHTML = phOptions);
 }
 
 // ─── Form Handlers ──────────────────────────────────────────────────
 
-async function handleReceive(e) {
-  e.preventDefault();
-  const form = e.target;
-  const data = Object.fromEntries(new FormData(form));
-  await api('/stock/receive', { method: 'POST', body: JSON.stringify(data) });
-  showToast('تم إضافة الدواء للمخزون بنجاح');
-  closeModal('receiveModal');
-  loadAll();
-}
+
 
 async function handleDeduct(e) {
   e.preventDefault();
   const form = e.target;
-  const data = Object.fromEntries(new FormData(form));
-  await api('/stock/deduct', { method: 'POST', body: JSON.stringify(data) });
+  const formData = new FormData(form);
+  const data = Object.fromEntries(formData);
+  data.pharmacy_id = data.location_id;
+  
+  if (!data.specific_batch_no) {
+    delete data.specific_batch_no; // Let backend use FIFO
+  }
+  
+  await api('/stock/pharmacy-sale', { method: 'POST', body: JSON.stringify(data) });
   showToast('تم صرف الدواء بنجاح');
   closeModal('deductModal');
   loadAll();
 }
 
-async function handleTransfer(e) {
+async function handleAdjust(e) {
   e.preventDefault();
   const form = e.target;
   const data = Object.fromEntries(new FormData(form));
-  await api('/stock/transfer', { method: 'POST', body: JSON.stringify(data) });
-  showToast('تم نقل المخزون بنجاح');
-  form.reset();
+  await api('/stock/adjust', { method: 'POST', body: JSON.stringify(data) });
+  showToast('تم إتلاف / تسوية المخزون بنجاح');
+  closeModal('adjustModal');
   loadAll();
 }
+
+async function handleReceiveCompany(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form));
+  await api('/stock/company-to-warehouse', { method: 'POST', body: JSON.stringify(data) });
+  showToast('تم تسجيل استلام البضاعة من الشركة بنجاح');
+  closeModal('receiveCompanyModal');
+  loadAll();
+}
+
+async function handleDispatch(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form));
+  await api('/stock/warehouse-to-pharmacy', { method: 'POST', body: JSON.stringify(data) });
+  showToast('تم تسجيل صرف البضاعة للصيدلية بنجاح');
+  closeModal('dispatchModal');
+  loadAll();
+}
+
 
 async function adminAddLocation(e) {
   e.preventDefault();
@@ -181,15 +261,6 @@ async function adminAddProduct(e) {
   loadAll();
 }
 
-async function adminAddBatch(e) {
-  e.preventDefault();
-  const form = e.target;
-  const data = Object.fromEntries(new FormData(form));
-  await api('/batches', { method: 'POST', body: JSON.stringify(data) });
-  showToast('تم حفظ التشغيلة بنجاح');
-  form.reset();
-  loadAll();
-}
 
 async function deleteProduct(id) {
   if (!confirm('هل أنت متأكد من حذف هذا الدواء؟')) return;
@@ -228,8 +299,8 @@ async function ackAlert(id) {
 // ─── Render Logic ──────────────────────────────────────────────────
 
 function locationBadge(type) {
-  const color = { 'Pharmacy': 'blue', 'Warehouse': 'teal', 'Exporter': 'amber' }[type] || 'purple';
-  const label = { 'Pharmacy': 'صيدلية', 'Warehouse': 'مستودع', 'Exporter': 'مُصدّر' }[type] || type;
+  const color = { 'Pharmacy': 'blue', 'Warehouse': 'teal', 'Supplier': 'amber' }[type] || 'purple';
+  const label = { 'Pharmacy': 'صيدلية', 'Warehouse': 'مستودع', 'Supplier': 'مورد' }[type] || type;
   return `<span class="badge badge--${color}">${label}</span>`;
 }
 
@@ -249,7 +320,8 @@ function sortInventory(col) {
 }
 
 function renderInventoryTable() {
-  const inv = [...state.inventory];
+  const filtered = state.inventory.filter(item => !state.category || item.location_type === state.category);
+  const inv = [...filtered];
   
   // Sorting logic
   inv.sort((a, b) => {
@@ -383,6 +455,72 @@ async function loadMovements() {
   }).join('');
 }
 
+async function loadPharmacyDashboard() {
+  try {
+    const data = await api('/reports/pharmacy-dashboard');
+    const lowEl = $('pharmacyLowStockCount');
+    const expEl = $('pharmacyExpiryCount');
+    const salesEl = $('pharmacySalesTotal');
+    
+    if (lowEl) lowEl.textContent = data.insufficientProductsCount;
+    if (expEl) expEl.textContent = data.nearExpiryBatchesCount;
+    if (salesEl) salesEl.textContent = data.totalMonthlySales + ' وحدة';
+  } catch (err) {
+    console.error('Failed to load pharmacy dashboard stats', err);
+  }
+}
+
+async function loadWarehouseDashboard() {
+  try {
+    const data = await api('/reports/warehouse-dashboard');
+    const lowEl = $('warehouseLowStockCount');
+    const expEl = $('warehouseExpiryCount');
+    
+    if (lowEl) lowEl.textContent = data.insufficientProductsCount;
+    if (expEl) expEl.textContent = data.nearExpiryBatchesCount;
+    
+    const inList = $('warehouseIncomingList');
+    if (inList) {
+      if (data.incomingDeliveries.length === 0) {
+        inList.innerHTML = '<div class="empty-state">لا يوجد استلامات أخيرة</div>';
+      } else {
+        inList.innerHTML = data.incomingDeliveries.map(m => `
+          <div class="row-item">
+            <div class="row-item__left">
+              <div class="row-item__name">${m.product_name} <span class="badge badge--success">📥 استلام</span></div>
+              <div class="row-item__meta">من: ${m.from_supplier} • الكمية: <b>${m.quantity}</b></div>
+            </div>
+            <div class="row-item__right" style="color: var(--text-muted); font-size: 0.8rem; text-align: left;">
+              ${new Date(m.created_at).toLocaleString('ar-SA')}
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    const outList = $('warehouseOutgoingList');
+    if (outList) {
+      if (data.outgoingShipments.length === 0) {
+        outList.innerHTML = '<div class="empty-state">لا يوجد توزيع أخير</div>';
+      } else {
+        outList.innerHTML = data.outgoingShipments.map(m => `
+          <div class="row-item">
+            <div class="row-item__left">
+              <div class="row-item__name">${m.product_name} <span class="badge badge--blue">📤 توزيع</span></div>
+              <div class="row-item__meta">إلى: ${m.to_pharmacy} • الكمية: <b>${m.quantity}</b></div>
+            </div>
+            <div class="row-item__right" style="color: var(--text-muted); font-size: 0.8rem; text-align: left;">
+              ${new Date(m.created_at).toLocaleString('ar-SA')}
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load warehouse dashboard stats', err);
+  }
+}
+
 async function loadAll() {
   $('statusText').textContent = 'جاري التحديث...';
   try {
@@ -393,12 +531,18 @@ async function loadAll() {
       loadInventoryTable(),
       loadAlerts(),
       loadLowStock(),
-      loadMovements()
+      loadMovements(),
+      loadPharmacyDashboard(),
+      loadWarehouseDashboard()
     ]);
     
+    // Trigger filter and toggle dashboard state based on current category
+    switchCategory(state.category);
+
     $('statusText').textContent = 'متصل';
     $('statusText').style.color = 'var(--success)';
   } catch (err) {
+    switchCategory(state.category);
     $('statusText').textContent = 'غير متصل';
     $('statusText').style.color = 'var(--danger)';
   }

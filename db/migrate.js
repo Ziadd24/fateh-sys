@@ -49,10 +49,12 @@ function migrateUp() {
     const name = file.replace('.up.sql', '');
     console.log(`⏳ Applying: ${name} ...`);
     
+    db.exec('PRAGMA foreign_keys = OFF');
     db.transaction(() => {
       db.exec(sql);
       db.prepare('INSERT OR IGNORE INTO _migrations (filename) VALUES (?)').run(name);
     })();
+    db.exec('PRAGMA foreign_keys = ON');
     
     console.log(`✔  Applied:  ${name}`);
   }

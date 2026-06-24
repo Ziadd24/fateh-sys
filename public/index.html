@@ -49,10 +49,7 @@
           <span class="header__dot"></span>
           <span id="statusText">جاري الاتصال…</span>
         </div>
-        <div class="topbar__actions">
-          <button class="btn-primary" onclick="openModal('deductModal')" style="background: var(--danger);">➖ صرف دواء</button>
-          <button class="btn-primary" onclick="openModal('receiveModal')" style="background: var(--success);">➕ إضافة للمخزون</button>
-        </div>
+        <!-- Removed global topbar actions to prevent bypassing workflows -->
       </header>
 
       <!-- CONTENT WRAPPER -->
@@ -60,6 +57,103 @@
         
         <!-- ═══ TAB: INVENTORY (Main Doctor View) ═══ -->
         <div id="tab-inventory" class="tab-content active">
+
+        <!-- CATEGORY SWITCHER -->
+        <nav class="category-switcher">
+          <button class="category-btn active" data-category="Pharmacy" onclick="switchCategory('Pharmacy')">الصيدليات</button>
+          <button class="category-btn" data-category="Warehouse" onclick="switchCategory('Warehouse')">المستودع</button>
+          <button class="category-btn" data-category="Supplier" onclick="switchCategory('Supplier')">الموردون</button>
+        </nav>
+
+        <!-- PHARMACY DASHBOARD PLACEHOLDER -->
+        <div id="pharmacy-dashboard" class="pharmacy-only" style="margin-bottom: 2rem;">
+          
+          <!-- Pharmacy Actions -->
+          <div class="topbar__actions" style="margin-bottom: 1.5rem; display: flex; gap: 1rem;">
+            <button class="btn-primary" onclick="openModal('deductModal')" style="background: var(--danger);">➖ صرف دواء</button>
+            <button class="btn-primary" onclick="openModal('adjustModal')" style="background: #666;">🗑️ إتلاف / تسوية</button>
+          </div>
+
+          <div class="pharmacy-dashboard-card">
+            <h3 class="pharmacy-dashboard-title">لوحة تحكم مشرف الصيدلية</h3>
+            <div class="pharmacy-dashboard-grid">
+              <div class="pharmacy-metric-card">
+                <span class="pharmacy-metric-icon">🔻</span>
+                <div class="pharmacy-metric-details">
+                  <span class="pharmacy-metric-value" id="pharmacyLowStockCount">—</span>
+                  <span class="pharmacy-metric-label">أدوية منخفضة المخزون</span>
+                </div>
+              </div>
+              <div class="pharmacy-metric-card">
+                <span class="pharmacy-metric-icon">⏰</span>
+                <div class="pharmacy-metric-details">
+                  <span class="pharmacy-metric-value" id="pharmacyExpiryCount">—</span>
+                  <span class="pharmacy-metric-label">تنبيهات انتهاء الصلاحية</span>
+                </div>
+              </div>
+              <div class="pharmacy-metric-card">
+                <span class="pharmacy-metric-icon">💰</span>
+                <div class="pharmacy-metric-details">
+                  <span class="pharmacy-metric-value" id="pharmacySalesTotal">—</span>
+                  <span class="pharmacy-metric-label">المبيعات الشهرية المقدرة</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- WAREHOUSE DASHBOARD -->
+        <div id="warehouse-dashboard" class="warehouse-only" style="display: none; margin-bottom: 2rem;">
+          
+          <!-- Warehouse Actions -->
+          <div class="topbar__actions" style="margin-bottom: 1.5rem; display: flex; gap: 1rem;">
+            <button class="btn-primary" onclick="openModal('receiveCompanyModal')" style="background: var(--success);">📥 استلام من شركة (مورد)</button>
+            <button class="btn-primary" onclick="openModal('dispatchModal')" style="background: var(--primary);">📤 صرف لصيدلية</button>
+            <button class="btn-primary" onclick="openModal('adjustModal')" style="background: #666;">🗑️ إتلاف / تسوية</button>
+          </div>
+
+          <div class="pharmacy-dashboard-card" style="border-right-color: var(--teal);">
+            <h3 class="pharmacy-dashboard-title">لوحة تحكم المستودع المركزي</h3>
+            <div class="pharmacy-dashboard-grid">
+              <div class="pharmacy-metric-card">
+                <span class="pharmacy-metric-icon">🔻</span>
+                <div class="pharmacy-metric-details">
+                  <span class="pharmacy-metric-value" id="warehouseLowStockCount">—</span>
+                  <span class="pharmacy-metric-label">أدوية منخفضة المخزون بالمستودع</span>
+                </div>
+              </div>
+              <div class="pharmacy-metric-card">
+                <span class="pharmacy-metric-icon">⏰</span>
+                <div class="pharmacy-metric-details">
+                  <span class="pharmacy-metric-value" id="warehouseExpiryCount">—</span>
+                  <span class="pharmacy-metric-label">تنبيهات انتهاء الصلاحية</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panels" style="margin-top: 1.5rem; grid-template-columns: 1fr 1fr;">
+            <!-- Incoming Deliveries -->
+            <div class="panel fade-in">
+              <div class="panel__header">
+                <div class="panel__title">📥 سجل الاستلام (من الشركات)</div>
+              </div>
+              <div class="panel__body" id="warehouseIncomingList">
+                <div class="empty-state">جاري التحميل...</div>
+              </div>
+            </div>
+            
+            <!-- Outgoing Shipments -->
+            <div class="panel fade-in">
+              <div class="panel__header">
+                <div class="panel__title">📤 سجل التوزيع (للصيدليات)</div>
+              </div>
+              <div class="panel__body" id="warehouseOutgoingList">
+                <div class="empty-state">جاري التحميل...</div>
+              </div>
+            </div>
+          </div>
+        </div>
           <div class="panel">
             <div class="panel__header">
               <div class="panel__title">جدول المخزون الحالي</div>
@@ -145,32 +239,7 @@
           <div class="section-header" style="margin-top:0;">
             <div class="section-header__title">🔄 عمليات الإمداد المركزية</div>
           </div>
-          <div class="panel fade-in" style="margin-bottom: 2rem;">
-            <div class="panel__header"><div class="panel__title">نقل مخزون بين الفروع (خاص بمدير الإمداد)</div></div>
-            <div class="panel__body">
-              <form id="transferForm" onsubmit="handleTransfer(event)" style="display: grid; grid-template-columns: repeat(4, 1fr) auto; gap: 1rem; align-items: end; padding: 1.5rem;">
-                <div class="form-group" style="margin:0;">
-                  <label>من فرع</label>
-                  <select name="from_location_id" required class="select-location"></select>
-                </div>
-                <div class="form-group" style="margin:0;">
-                  <label>إلى فرع</label>
-                  <select name="to_location_id" required class="select-location"></select>
-                </div>
-                <div class="form-group" style="margin:0;">
-                  <label>الدواء</label>
-                  <select name="product_id" required class="select-product"></select>
-                </div>
-                <div class="form-group" style="margin:0;">
-                  <label>الكمية المنقولة</label>
-                  <input type="number" name="quantity" min="1" required>
-                </div>
-                <button type="submit" class="btn-primary" style="height: 38px;">نقل</button>
-              </form>
-            </div>
-          </div>
-
-          <div class="section-header">
+          <div class="section-header" style="margin-top:0;">
             <div class="section-header__title">إعدادات النظام (إضافة تعريفات جديدة)</div>
           </div>
           <div class="panels" style="grid-template-columns: repeat(3, 1fr); align-items: start;">
@@ -197,27 +266,6 @@
               </div>
             </div>
 
-            <!-- Add Batch -->
-            <div class="panel fade-in">
-              <div class="panel__header"><div class="panel__title">📦 تسجيل تشغيلة جديدة (Batch)</div></div>
-              <div class="panel__body">
-                <form id="addBatchForm" onsubmit="adminAddBatch(event)">
-                  <div class="form-group">
-                    <label>رقم التشغيلة</label>
-                    <input type="text" name="batch_no" required placeholder="مثال: B-2026-001">
-                  </div>
-                  <div class="form-group">
-                    <label>الدواء</label>
-                    <select name="product_id" required class="select-product"></select>
-                  </div>
-                  <div class="form-group">
-                    <label>تاريخ الانتهاء</label>
-                    <input type="date" name="expiry_date" required>
-                  </div>
-                  <button type="submit" class="btn-primary" style="width:100%">حفظ التشغيلة</button>
-                </form>
-              </div>
-            </div>
 
             <!-- Add Location -->
             <div class="panel fade-in">
@@ -233,7 +281,7 @@
                     <select name="type" required>
                       <option value="Pharmacy">صيدلية</option>
                       <option value="Warehouse">مستودع مركزي</option>
-                      <option value="Exporter">مُصدّر خارجي</option>
+                      <option value="Supplier">شركة موردة</option>
                     </select>
                   </div>
                   <button type="submit" class="btn-primary" style="width:100%">حفظ الفرع</button>
@@ -273,29 +321,71 @@
   </div>
 
   <!-- ═══ MODALS (Doctor Actions) ═══ -->
-  <div class="modal-overlay" id="receiveModal">
+  <div class="modal-overlay" id="receiveCompanyModal">
     <div class="modal">
       <div class="modal__header">
-        <div class="modal__title">➕ إضافة دواء للمخزون</div>
-        <button class="modal__close" onclick="closeModal('receiveModal')">&times;</button>
+        <div class="modal__title">📥 استلام بضاعة من شركة</div>
+        <button class="modal__close" onclick="closeModal('receiveCompanyModal')">&times;</button>
       </div>
-      <form class="modal__form" id="receiveForm" onsubmit="handleReceive(event)">
+      <form class="modal__form" id="receiveCompanyForm" onsubmit="handleReceiveCompany(event)">
         <div class="form-group">
-          <label>الموقع (صيدليتك)</label>
-          <select name="location_id" required class="select-location"></select>
+          <label>الشركة (مورد)</label>
+          <select name="supplier_id" required class="select-supplier"></select>
+        </div>
+        <div class="form-group">
+          <label>مستودع الاستلام</label>
+          <select name="warehouse_id" required class="select-warehouse"></select>
+        </div>
+        <div class="form-group">
+          <label>الدواء</label>
+          <select name="product_id" required class="select-product"></select>
         </div>
         <div class="form-group">
           <label>رقم التشغيلة (Batch)</label>
-          <select name="batch_no" required class="select-batch"></select>
+          <input type="text" name="batch_no" required placeholder="مثال: B-2026-001">
+        </div>
+        <div class="form-group">
+          <label>تاريخ الانتهاء</label>
+          <input type="date" name="expiry_date" required>
         </div>
         <div class="form-group">
           <label>الكمية المستلمة</label>
           <input type="number" name="quantity" min="1" required>
         </div>
-        <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem; background: var(--success);">تأكيد الإضافة</button>
+        <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem; background: var(--success);">تأكيد الاستلام</button>
       </form>
     </div>
   </div>
+
+  <div class="modal-overlay" id="dispatchModal">
+    <div class="modal">
+      <div class="modal__header">
+        <div class="modal__title">📤 صرف بضاعة لصيدلية</div>
+        <button class="modal__close" onclick="closeModal('dispatchModal')">&times;</button>
+      </div>
+      <form class="modal__form" id="dispatchForm" onsubmit="handleDispatch(event)">
+        <div class="form-group">
+          <label>من (المستودع)</label>
+          <select name="warehouse_id" required class="select-warehouse"></select>
+        </div>
+        <div class="form-group">
+          <label>إلى (الصيدلية)</label>
+          <select name="pharmacy_id" required class="select-pharmacy"></select>
+        </div>
+        <div class="form-group">
+          <label>الدواء</label>
+          <select name="product_id" required class="select-product"></select>
+        </div>
+        <div class="form-group">
+          <label>الكمية المصروفة</label>
+          <input type="number" name="quantity" min="1" required>
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem; background: var(--primary);">تأكيد الصرف</button>
+      </form>
+    </div>
+  </div>
+
+
 
   <div class="modal-overlay" id="deductModal">
     <div class="modal">
@@ -313,10 +403,50 @@
           <select name="product_id" required class="select-product"></select>
         </div>
         <div class="form-group">
+          <label>التشغيلة المحددة (اختياري)</label>
+          <select name="specific_batch_no" class="select-batch">
+            <option value="">-- تلقائي (FIFO) --</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label>الكمية المصروفة</label>
           <input type="number" name="quantity" min="1" required>
         </div>
         <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem; background: var(--danger);">تأكيد الصرف</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="adjustModal">
+    <div class="modal">
+      <div class="modal__header">
+        <div class="modal__title">🗑️ تسوية إتلاف / استبعاد</div>
+        <button class="modal__close" onclick="closeModal('adjustModal')">&times;</button>
+      </div>
+      <form class="modal__form" id="adjustForm" onsubmit="handleAdjust(event)">
+        <div class="form-group">
+          <label>الموقع (المستودع أو الصيدلية)</label>
+          <select name="location_id" required class="select-location"></select>
+        </div>
+        <div class="form-group">
+          <label>الدواء</label>
+          <select name="product_id" required class="select-product"></select>
+        </div>
+        <div class="form-group">
+          <label>التشغيلة المتلفة (إجباري)</label>
+          <select name="specific_batch_no" required class="select-batch-required">
+            <option value="">-- اختر التشغيلة --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>الكمية المستبعدة</label>
+          <input type="number" name="quantity" min="1" required>
+        </div>
+        <div class="form-group">
+          <label>ملاحظة / سبب الإتلاف</label>
+          <input type="text" name="note" placeholder="مثال: دواء منتهي الصلاحية">
+        </div>
+        <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem; background: #666;">تأكيد الإتلاف</button>
       </form>
     </div>
   </div>

@@ -12,7 +12,9 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const dbPath = path.join(dataDir, 'vet-monitor.db');
+const dbPath = process.env.TEST_DB_PATH
+  ? path.resolve(process.env.TEST_DB_PATH)
+  : path.join(dataDir, 'vet-monitor.db');
 const db = new DatabaseSync(dbPath);
 
 // Enable foreign keys

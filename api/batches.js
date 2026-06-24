@@ -60,7 +60,7 @@ router.delete('/:batch_no', asyncHandler((req, res) => {
     }
     res.json({ success: true });
   } catch (err) {
-    if (err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+    if (err.message && err.message.includes('FOREIGN KEY constraint failed')) {
       return res.status(400).json({ error: 'لا يمكن حذف هذه التشغيلة لوجود كميات مرتبطة بها بالمخزون.' });
     }
     throw err;
