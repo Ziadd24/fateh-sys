@@ -51,6 +51,21 @@ router.post('/', requireFields('batch_no', 'product_id', 'expiry_date'), asyncHa
   res.status(201).json(batch);
 }));
 
+router.put('/:batch_no', requireFields('expiry_date'), asyncHandler((req, res) => {
+  const { batch_no } = req.params;
+  const { expiry_date, manufactured } = req.body;
+  
+  const result = db.prepare(`
+    UPDATE batch
+    SET expiry_date = ?, manufactured = ?
+    WHERE batch_no = ?
+  `).run(expiry_date, manufactured || null, batch_no);
+
+  if (result.changes === 0) return res.status(404).json({ error: 'التشغيلة غير موجودة' });
+  
+  res.json({ success: true });
+}));
+
 router.delete('/:batch_no', asyncHandler((req, res) => {
   const { batch_no } = req.params;
   try {

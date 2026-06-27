@@ -83,6 +83,7 @@ function migrateDown() {
   
   db.transaction(() => {
     db.exec(sql);
+    db.prepare('DELETE FROM _migrations WHERE filename = ?').run(last);
   })();
   
   console.log(`✔  Rolled back:  ${last}`);

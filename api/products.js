@@ -41,35 +41,83 @@ router.get('/:id', asyncHandler((req, res) => {
 }));
 
 router.post('/', requireFields('name', 'category'), asyncHandler((req, res) => {
-  let { sku, name, category } = req.body;
+  let { sku, name, category, storage_condition } = req.body;
   
   if (!sku) {
-    sku = 'VET-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+    sku = Math.random().toString(36).substring(2, 6).toUpperCase();
   }
+  
+  const uCost = 0.0;
+  const sCond = storage_condition || 'Room Temperature';
 
   const result = db.prepare(`
-    INSERT INTO product (sku, name, category)
-    VALUES (?, ?, ?)
-  `).run(sku, name, category);
+    INSERT INTO product (sku, name, category, unit_cost, storage_condition)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(sku, name, category, uCost, sCond);
+
+  res.status(201).json({ 
+    product_id: result.lastInsertRowid, 
+    sku, name, category, unit_cost: uCost, storage_condition: sCond 
+  });
+}));
+
+router.put('/:id', requireFields('name', 'category'), asyncHandler((req, res) => {
+  const { id } = req.params;
+  const { sku, name, category, storage_condition } = req.body;
+  const sCond = storage_condition || 'Room Temperature';
+
+  const result = db.prepare(`
+    UPDATE product 
+    SET sku = ?, name = ?, category = ?, storage_condition = ?
+    WHERE product_id = ?
+  `).run(sku, name, category, sCond, id);
+
+  if (result.changes === 0) return res.status(404).json({ error: 'المنتج غير موجود' });
   
-  const product = db.prepare('SELECT * FROM product WHERE product_id = ?').get(result.lastInsertRowid);
-  res.status(201).json(product);
+  res.json({ success: true });
 }));
 
 router.delete('/:id', asyncHandler((req, res) => {
   const { id } = req.params;
-  try {
-    const result = db.prepare('DELETE FROM product WHERE product_id = ?').run(id);
-    if (result.changes === 0) {
+
+  return db.transaction(() => {
+    // 1. Verify product exists
+    const product = db.prepare('SELECT product_id FROM product WHERE product_id = ?').get(id);
+    if (!product) {
       return res.status(404).json({ error: 'لم يتم العثور على الدواء' });
     }
-    res.json({ success: true });
-  } catch (err) {
-    if (err.message && err.message.includes('FOREIGN KEY constraint failed')) {
-      return res.status(400).json({ error: 'لا يمكن حذف هذا الدواء لوجود كميات أو تشغيلات مرتبطة به بالمخزون.' });
+
+    // 2. Get all batches for this product
+    const batches = db.prepare('SELECT batch_no FROM batch WHERE product_id = ?').all(id);
+
+    // 3. Block deletion if any batch still has live stock
+    for (const { batch_no } of batches) {
+      const stockRow = db.prepare(
+        'SELECT COALESCE(SUM(quantity), 0) AS total FROM stock_level WHERE batch_no = ?'
+      ).get(batch_no);
+      if (stockRow && stockRow.total > 0) {
+        return res.status(400).json({
+          error: 'لا يمكن حذف هذا الدواء لوجود كميات في المخزون. يرجى تصفية المخزون أولاً.'
+        });
+      }
     }
-    throw err;
-  }
+
+    // 4. For every batch (all zero-stock), delete dependencies then the batch itself
+    for (const { batch_no } of batches) {
+      db.prepare('DELETE FROM expiry_alert         WHERE batch_no = ?').run(batch_no);
+      db.prepare('DELETE FROM inventory_discrepancy WHERE batch_no = ?').run(batch_no);
+      db.prepare('DELETE FROM stock_level           WHERE batch_no = ?').run(batch_no);
+      db.prepare('DELETE FROM stock_movement        WHERE batch_no = ?').run(batch_no);
+      db.prepare('DELETE FROM batch                 WHERE batch_no = ?').run(batch_no);
+    }
+
+    // 5. supplier_offer and supplier_price_history cascade via ON DELETE CASCADE on product_id
+    // 6. Delete the product
+    db.prepare('DELETE FROM product WHERE product_id = ?').run(id);
+
+    return res.json({ success: true });
+  })();
 }));
+
 
 module.exports = router;

@@ -19,7 +19,6 @@ function scanAndAlert() {
     JOIN product  p ON p.product_id  = b.product_id
     JOIN location l ON l.location_id = sl.location_id
     WHERE b.expiry_date <= date('now', '+4 months')
-      AND b.expiry_date >  date('now')
       AND sl.quantity   >  0
     ORDER BY b.expiry_date ASC
   `).all();

@@ -1,0 +1,4 @@
+-- =============================================================
+-- Migration 006 Down
+-- =============================================================
+-- This is intentionally blank for now, as reversing the drop requires assuming defaults.

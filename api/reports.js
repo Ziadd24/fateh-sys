@@ -19,6 +19,7 @@ router.get('/pharmacy-dashboard', asyncHandler((req, res) => {
       AND sm.movement = 'OUT'
       AND sm.created_at >= date('now', 'start of month')
       AND sm.created_at < date('now', 'start of month', '+1 month')
+      AND (sm.reference_note IS NULL OR sm.reference_note NOT LIKE '[REVERSED]%')
   `).get();
   const totalMonthlySales = totalMonthlySalesRow ? totalMonthlySalesRow.total_sales : 0;
 
@@ -79,6 +80,7 @@ router.get('/pharmacy-dashboard', asyncHandler((req, res) => {
       AND l.type = 'Pharmacy'
       AND sm.created_at >= date('now', 'start of month')
       AND sm.created_at < date('now', 'start of month', '+1 month')
+      AND (sm.reference_note IS NULL OR sm.reference_note NOT LIKE '[REVERSED]%')
     GROUP BY p.product_id, p.name, p.sku
     ORDER BY quantity_sold DESC, p.name ASC
   `).all();

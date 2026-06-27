@@ -30,7 +30,7 @@ try {
 }
 
 // ─── Global middleware ────────────────────────────────────────────────
-app.use(cors());
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json());
 
 // ─── Serve dashboard frontend ─────────────────────────────────────────
@@ -50,6 +50,8 @@ app.use('/api/alerts',     require('./api/alerts'));
 app.use('/api/movements',  require('./api/movements'));
 app.use('/api/inventory',  require('./api/inventory'));
 app.use('/api/reports',    require('./api/reports'));
+app.use('/api/offers',     require('./api/offers'));
+app.use('/api/analytics',  require('./api/analytics'));
 
 // ─── Error handler (must be last) ─────────────────────────────────────
 app.use(errorHandler);

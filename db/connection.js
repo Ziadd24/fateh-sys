@@ -21,16 +21,33 @@ const db = new DatabaseSync(dbPath);
 db.exec('PRAGMA foreign_keys = ON;');
 
 // Helper method to wrap a function in a transaction since node:sqlite does not have db.transaction() like better-sqlite3 yet.
+let transactionDepth = 0;
 db.transaction = (fn) => {
   return (...args) => {
-    db.exec('BEGIN TRANSACTION');
+    transactionDepth++;
+    if (transactionDepth === 1) {
+      db.exec('BEGIN TRANSACTION');
+    } else {
+      db.exec(`SAVEPOINT sp_${transactionDepth}`);
+    }
+    
     try {
       const result = fn(...args);
-      db.exec('COMMIT');
+      if (transactionDepth === 1) {
+        db.exec('COMMIT');
+      } else {
+        db.exec(`RELEASE SAVEPOINT sp_${transactionDepth}`);
+      }
       return result;
     } catch (err) {
-      db.exec('ROLLBACK');
+      if (transactionDepth === 1) {
+        db.exec('ROLLBACK');
+      } else {
+        db.exec(`ROLLBACK TO SAVEPOINT sp_${transactionDepth}`);
+      }
       throw err;
+    } finally {
+      transactionDepth--;
     }
   };
 };

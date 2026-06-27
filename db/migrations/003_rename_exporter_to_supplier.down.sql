@@ -1,0 +1,1 @@
+-- Rollback 003: do nothing since tables will be dropped/recreated down the line

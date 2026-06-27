@@ -48,3 +48,16 @@ Coordinate/orchestrate the implementation of the custom Vet Monitor multi-tab sy
 You are the Project Orchestrator. Your working directory is d:\ziad 2026\vet-monitor\.agents\orchestrator.
 The previous orchestrator run crashed due to an authentication error. Please inspect the existing files in .agents/ (including orchestrator/progress.md, sub_orch_*, explorer_*) to resume the project immediately from the current state.
 Coordinate the implementation of the remaining milestones (M2: Backend API, M3: Frontend Switcher, M4: Pharmacy Dashboard UI, M5: E2E Verification). Once all milestones are complete, verify your findings, write your handoff, and report completion back to me.
+
+## 2026-06-25T23:35:31Z
+
+You are the Project Orchestrator. Your mission is to coordinate the comprehensive code audit and review of the Vet Monitor system, focusing on identifying silent errors, logical flaws, incorrect calculations, and over-engineered solutions.
+Working directory: d:\ziad 2026\vet-monitor
+Please read ORIGINAL_REQUEST.md at the project root for details.
+
+Requirements:
+1. Locate or create a programmatic way to test impacted modules (e.g. running existing test suite or writing a focused sanity test) before modifying any code.
+2. Review critical paths (like API routes, calculation modules) for silent errors, incorrect math/business logic, over-engineering, and logical flaws.
+3. Apply direct code remediation/refactoring to resolve these issues. Ensure all changes pass the tests and do not break functionality.
+4. Produce a detailed `audit_report.md` documenting all found issues, files, line numbers, and fixes.
+5. Create and update your `progress.md` file regularly. When all requirements are met and verified, report completion.

@@ -23,8 +23,8 @@ const htmlPath = path.resolve(__dirname, '../public/index.html');
 const html = fs.readFileSync(htmlPath, 'utf8');
 
 test("HTML: category-switcher buttons exist with correct attributes", () => {
-  // Regex to find buttons with class containing 'category-btn'
-  const buttonsMatches = [...html.matchAll(/<button[^>]*class="[^"]*category-btn[^"]*"[^>]*>/gi)];
+  // Only count top-level switcher buttons that have a data-category attribute
+  const buttonsMatches = [...html.matchAll(/<button[^>]*data-category="[^"]+"[^>]*class="[^"]*category-btn[^"]*"[^>]*>|<button[^>]*class="[^"]*category-btn[^"]*"[^>]*data-category="[^"]+"[^>]*>/gi)];
   assert.strictEqual(buttonsMatches.length, 3, "There should be exactly 3 category switcher buttons");
   
   // Verify data-category and onclick attributes
@@ -69,8 +69,9 @@ test("JS: switchCategory() is implemented, updates state.category, updates activ
       },
       style: { display: 'block' },
       attributes: attrs,
-      getAttribute: (name) => el.attributes[name] || null,
+      getAttribute: (name) => el.attributes[name] !== undefined ? el.attributes[name] : null,
       setAttribute: (name, val) => { el.attributes[name] = val; },
+      addEventListener: () => {},
       textContent: '',
       innerHTML: '',
       appendChild: () => {},
@@ -79,7 +80,8 @@ test("JS: switchCategory() is implemented, updates state.category, updates activ
         const childId = `${id}_${sel}`;
         if (!domElements[childId]) domElements[childId] = mockElement(childId);
         return domElements[childId];
-      }
+      },
+      querySelectorAll: () => []
     };
     return el;
   };
@@ -118,6 +120,12 @@ test("JS: switchCategory() is implemented, updates state.category, updates activ
     console: {
       log: () => {},
       error: () => {},
+    },
+    localStorage: {
+      _store: {},
+      getItem: function(k) { return this._store[k] !== undefined ? this._store[k] : null; },
+      setItem: function(k, v) { this._store[k] = v; },
+      removeItem: function(k) { delete this._store[k]; },
     },
     setInterval: () => {},
     fetch: async () => ({ ok: true, json: async () => ({}) }),

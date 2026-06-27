@@ -124,7 +124,7 @@ FROM stock_level sl
 JOIN batch    b ON b.batch_no   = sl.batch_no
 JOIN product  p ON p.product_id = b.product_id
 JOIN location l ON l.location_id = sl.location_id
-WHERE sl.quantity <= sl.reorder_point;
+WHERE sl.quantity <= sl.reorder_point AND (sl.quantity > 0 OR sl.reorder_point > 0);
 
 -- Exporter-allocated inventory
 CREATE VIEW vw_exporter_inventory AS
