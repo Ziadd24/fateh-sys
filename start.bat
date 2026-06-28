@@ -9,7 +9,7 @@ where node >nul 2>nul
 if %errorlevel% neq 0 (
     echo ✖ [ERROR] Node.js is not installed or not in your system PATH!
     echo.
-    echo Please download and install Node.js (version 22.5.0 or newer) from:
+    echo Please download and install Node.js version 22.5.0 or newer from:
     echo https://nodejs.org/
     echo.
     pause
@@ -33,7 +33,7 @@ if %NODE_MAJOR% lss 22 (
 
 :: 3. Install dependencies if they are missing
 if not exist "node_modules\" (
-    echo 📦 [INFO] Installing required dependencies (first-time setup)...
+    echo 📦 [INFO] Installing required dependencies - first-time setup...
     call npm install
     if %errorlevel% neq 0 (
         echo ✖ [ERROR] Failed to install dependencies. Please run 'npm install' manually.
