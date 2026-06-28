@@ -78,6 +78,13 @@ app.use(errorHandler);
 const server = app.listen(PORT, () => {
   console.log(`🐾 Vet Monitor API running on http://localhost:${PORT}`);
   console.log(`   Health check: http://localhost:${PORT}/api/health`);
+  
+  // Auto-open browser only after the server is fully ready
+  try {
+    if (process.platform === 'win32') {
+      require('child_process').exec(`start http://localhost:${PORT}`);
+    }
+  } catch (err) {}
 });
 
 server.on('error', (err) => {

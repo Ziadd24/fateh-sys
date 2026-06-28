@@ -1416,7 +1416,7 @@ async function ignoreLowStock(locationId, batchNo) {
   try {
     const res = await api('/stock/ignore-low', {
       method: 'PUT',
-      body: { location_id: locationId, batch_no: batchNo }
+      body: JSON.stringify({ location_id: locationId, batch_no: batchNo })
     });
     if (res.success) {
       showToast('تم تجاهل التنبيه', 'success');

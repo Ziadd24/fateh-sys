@@ -47,9 +47,7 @@ echo 🚀 [INFO] Starting the Vet Monitor server...
 echo 🌍 [INFO] The dashboard will open in your default browser at http://localhost:3000
 echo.
 
-:: Wait 2 seconds before opening browser to let the server initialize
-timeout /t 2 /nobreak >nul
-start "" "http://localhost:3000"
+:: The Express server will automatically open the browser once it is ready.
 
 :: Start the Express server
 npm start
