@@ -12,15 +12,50 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
+  <!-- ═══ LOGIN OVERLAY ═══ -->
+  <div id="loginOverlay" class="login-overlay" style="display: none;">
+    <div class="login-card">
+      <div class="login-card__brand">
+        <img src="/logo-icon.png" alt="Fateh Logo" class="login-card__logo-img" />
+        <h1 class="login-card__title">نظام فاتح للمراقبة</h1>
+        <p class="login-card__subtitle">إدارة مخزون الأدوية و الصيدليات</p>
+      </div>
+
+      <div id="loginError" class="login-error"></div>
+
+      <form id="loginForm" class="login-form" onsubmit="handleLoginSubmit(event)">
+        <div class="login-field">
+          <label class="login-field__label" for="loginUsername">اسم المستخدم</label>
+          <div class="login-input-wrapper">
+            <span class="login-input-icon">👤</span>
+            <input type="text" id="loginUsername" class="login-input" placeholder="أدخل اسم المستخدم" required autocomplete="username" />
+          </div>
+        </div>
+
+        <div class="login-field">
+          <label class="login-field__label" for="loginPassword">كلمة المرور</label>
+          <div class="login-input-wrapper">
+            <span class="login-input-icon">🔑</span>
+            <input type="password" id="loginPassword" class="login-input" placeholder="أدخل كلمة المرور" required autocomplete="current-password" />
+          </div>
+        </div>
+
+        <button type="submit" id="loginBtn" class="login-button">
+          <span>تسجيل الدخول</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
   <div class="dashboard-layout">
 
     <!-- ═══ SIDEBAR ═══ -->
     <aside class="sidebar">
       <div class="sidebar__header">
-        <div class="sidebar__brand-icon">🐾</div>
+        <img src="/logo-icon.png" alt="Fateh Logo" class="sidebar__brand-logo" />
         <div class="sidebar__brand-text">
-          <div class="sidebar__title">Vet Monitor</div>
-          <div class="sidebar__subtitle">العيادة والصيدلية</div>
+          <div class="sidebar__title">فاتح — FATEH</div>
+          <div class="sidebar__subtitle">SUPERVISOR SYSTEM</div>
         </div>
       </div>
       
@@ -43,7 +78,11 @@
       </nav>
 
       <div class="sidebar__footer">
-        Vet Monitor &copy; 2026
+        <div id="currentUserDisplay" style="margin-bottom: 0.75rem; font-weight: bold; color: var(--text-primary); font-size: 0.95rem;"></div>
+        <button id="logoutBtn" onclick="logout()" class="btn-logout">
+          🚪 تسجيل الخروج
+        </button>
+        <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">نظام فاتح للمراقبة &copy; 2026</div>
       </div>
     </aside>
 

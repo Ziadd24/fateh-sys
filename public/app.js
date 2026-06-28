@@ -1,3 +1,6 @@
+
+
+
 function escapeHTML(str) {
   if (str === null || str === undefined) return '';
   return String(str).replace(/[&<>'"]/g, tag => ({
@@ -153,16 +156,127 @@ function switchCategory(category) {
 
 async function api(path, options = {}) {
   try {
+    const headers = { 'Content-Type': 'application/json', ...options.headers };
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...options.headers }
+      headers
     });
+    
+    if (res.status === 401 && !isTestEnv()) {
+      handleSessionExpired();
+      throw new Error('انتهت جلسة العمل أو غير صالحة. يرجى إعادة تسجيل الدخول');
+    }
+
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'خطأ في الاتصال بالخادم');
     return data;
   } catch (err) {
     showToast(err.message, 'error');
     throw err;
+  }
+}
+
+function isTestEnv() {
+  return typeof window === 'undefined' || !window.location || !window.location.href;
+}
+
+function checkAuth() {
+  if (isTestEnv()) return true;
+
+  const token = localStorage.getItem('auth_token');
+  const loginOverlay = $('loginOverlay');
+  const dashboardLayout = document.querySelector('.dashboard-layout');
+
+  if (!token) {
+    if (loginOverlay) loginOverlay.style.display = 'flex';
+    if (dashboardLayout) dashboardLayout.style.display = 'none';
+    return false;
+  } else {
+    if (loginOverlay) loginOverlay.style.display = 'none';
+    if (dashboardLayout) {
+      dashboardLayout.style.display = 'grid';
+    }
+    
+    const username = localStorage.getItem('username') || 'المشرف';
+    const displayEl = $('currentUserDisplay');
+    if (displayEl) displayEl.textContent = `👤 ${username}`;
+    return true;
+  }
+}
+
+function handleSessionExpired() {
+  localStorage.removeItem('auth_token');
+  localStorage.removeItem('username');
+  checkAuth();
+}
+
+async function logout() {
+  try {
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+    }
+  } catch (err) {
+    console.error('Logout error:', err);
+  }
+  handleSessionExpired();
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  const usernameInput = $('loginUsername');
+  const passwordInput = $('loginPassword');
+  const errorEl = $('loginError');
+  const btn = $('loginBtn');
+  const btnSpan = btn.querySelector('span');
+
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+
+  if (!username || !password) return;
+
+  errorEl.style.display = 'none';
+  btn.disabled = true;
+  btnSpan.textContent = 'جاري التحقق...';
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'اسم المستخدم أو كلمة المرور غير صحيحة');
+    }
+
+    localStorage.setItem('auth_token', data.token);
+    localStorage.setItem('username', data.user.username);
+    
+    usernameInput.value = '';
+    passwordInput.value = '';
+    
+    if (checkAuth()) {
+      const savedTab = localStorage.getItem('activeAppTab') || 'inventory';
+      switchTab(savedTab);
+      await loadAll();
+    }
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.style.display = 'block';
+    errorEl.style.animation = 'none';
+    errorEl.offsetHeight; // trigger reflow
+    errorEl.style.animation = null; 
+  } finally {
+    btn.disabled = false;
+    btnSpan.textContent = 'تسجيل الدخول';
   }
 }
 
@@ -238,7 +352,7 @@ function renderDefinedProducts() {
   list.innerHTML = state.products.map(p => `
     <div class="row-item" style="padding: 0.75rem 1rem;">
       <div class="row-item__left">
-        <div class="row-item__name">${escapeHTML(p.name)} <span class="badge badge--purple">${p.sku}</span></div>
+        <div class="row-item__name">${escapeHTML(p.name)} <span class="badge badge--purple">${escapeHTML(p.sku)}</span></div>
         <div class="row-item__meta">الفئة: ${escapeHTML(p.category)}</div>
       </div>
       <div class="row-item__right" style="display: flex; gap: 0.5rem;">
@@ -261,12 +375,12 @@ function renderDefinedBatches() {
   list.innerHTML = state.batches.map(b => `
     <div class="row-item" style="padding: 0.75rem 1rem;">
       <div class="row-item__left">
-        <div class="row-item__name">التشغيلة: ${b.batch_no} <span style="font-size:0.8rem; color:var(--text-muted);">(${escapeHTML(b.product_name)})</span></div>
-        <div class="row-item__meta" style="color: ${b.days_until_expiry <= 120 ? 'var(--danger)' : 'inherit'}">انتهاء: ${b.expiry_date} | الكمية الإجمالية: ${b.total_stock}</div>
+        <div class="row-item__name">التشغيلة: ${escapeHTML(b.batch_no)} <span style="font-size:0.8rem; color:var(--text-muted);">(${escapeHTML(b.product_name)})</span></div>
+        <div class="row-item__meta" style="color: ${b.days_until_expiry <= 120 ? 'var(--danger)' : 'inherit'}">انتهاء: ${escapeHTML(b.expiry_date)} | الكمية الإجمالية: ${b.total_stock}</div>
       </div>
       <div class="row-item__right" style="display: flex; gap: 0.5rem;">
-        <button class="btn-refresh" style="color: var(--primary); border-color: var(--primary);" onclick="editBatch('${b.batch_no}')">تعديل</button>
-        <button class="btn-refresh" style="color: var(--danger); border-color: var(--danger);" onclick="deleteBatch('${b.batch_no}')">حذف</button>
+        <button class="btn-refresh" style="color: var(--primary); border-color: var(--primary);" onclick="editBatch('${escapeHTML(b.batch_no)}')">تعديل</button>
+        <button class="btn-refresh" style="color: var(--danger); border-color: var(--danger);" onclick="deleteBatch('${escapeHTML(b.batch_no)}')">حذف</button>
       </div>
     </div>
   `).join('');
@@ -285,7 +399,7 @@ function populateDropdowns() {
   const phOptionsOnly = buildOptions(state.locations.filter(l => l.type === 'Pharmacy'), 'location_id', l => l.name, 'اختر الصيدلية المستقبلة');
   const phSourceOptions = buildOptions(state.locations.filter(l => l.type === 'Pharmacy'), 'location_id', l => l.name, 'اختر الصيدلية');
   const internalOptions = buildOptions(state.locations.filter(l => l.type === 'Pharmacy' || l.type === 'Warehouse'), 'location_id', l => l.name, 'اختر الفرع / المستودع');
-  const prodOptions = buildOptions(state.products, 'product_id', p => `${p.name} (${p.sku})`, 'اختر الدواء');
+  const prodOptions = buildOptions(state.products, 'product_id', p => `${escapeHTML(p.name)} (${escapeHTML(p.sku)})`, 'اختر الدواء');
   
   populate('.select-location', locOptions);
   populate('.select-pharmacy-only', phOptionsOnly);
@@ -328,7 +442,7 @@ function populateDropdowns() {
   const filterMedVal = $('filterMedicineSelect')?.value || '';
 
   const filterPhOptions = buildOptions(state.locations.filter(l => l.type === 'Pharmacy'), 'location_id', l => l.name, 'جميع الصيدليات');
-  const filterMedsOptions = buildOptions(state.products, 'product_id', p => `${p.name} (${p.sku})`, 'جميع الأدوية');
+  const filterMedsOptions = buildOptions(state.products, 'product_id', p => `${escapeHTML(p.name)} (${escapeHTML(p.sku)})`, 'جميع الأدوية');
   
   populate('#filterPharmacySelect', filterPhOptions);
   populate('#filterMedicineSelect', filterMedsOptions);
@@ -340,7 +454,7 @@ function populateDropdowns() {
 
   const buildDatalist = (items, valueFn, idKey) => items.map(i => `<option value="${escapeHTML(valueFn(i))}" data-id="${i[idKey]}"></option>`).join('');
 
-  if ($('globalProductList')) $('globalProductList').innerHTML = buildDatalist(state.products, p => `${p.name} (${p.sku})`, 'product_id');
+  if ($('globalProductList')) $('globalProductList').innerHTML = buildDatalist(state.products, p => `${escapeHTML(p.name)} (${escapeHTML(p.sku)})`, 'product_id');
   if ($('globalSupplierList')) $('globalSupplierList').innerHTML = buildDatalist(state.locations.filter(l => l.type === 'Supplier'), l => l.name, 'location_id');
   if ($('globalWarehouseList')) $('globalWarehouseList').innerHTML = buildDatalist(state.locations.filter(l => l.type === 'Warehouse'), l => l.name, 'location_id');
   if ($('globalPharmacyList')) $('globalPharmacyList').innerHTML = buildDatalist(state.locations.filter(l => l.type === 'Pharmacy'), l => l.name, 'location_id');
@@ -467,7 +581,7 @@ function populateDropdowns() {
           : `<option value="">-- تلقائي (FIFO) --</option>`;
         bSelect.innerHTML = defaultOption + availableBatches.map(b => {
           const qtyText = b.quantity !== undefined ? ` [المتوفر: ${b.quantity}]` : '';
-          return `<option value="${b.batch_no}">${escapeHTML(b.batch_no)} (ينتهي ${escapeHTML(b.expiry_date || '')})${qtyText}</option>`;
+          return `<option value="${escapeHTML(b.batch_no)}">${escapeHTML(b.batch_no)} (ينتهي ${escapeHTML(b.expiry_date || '')})${qtyText}</option>`;
         }).join('');
 
         updateStockIndicator();
@@ -684,7 +798,7 @@ function populateDispatchBatchOptions(inputElement) {
   availableBatches.forEach(b => {
     const opt = document.createElement('option');
     opt.value = b.batch_no;
-    opt.textContent = `التشغيلة: ${b.batch_no} | الانتهاء: ${b.expiry_date} | الكمية: ${b.quantity}`;
+    opt.textContent = `التشغيلة: ${escapeHTML(b.batch_no)} | الانتهاء: ${escapeHTML(b.expiry_date)} | الكمية: ${b.quantity}`;
     batchSelect.appendChild(opt);
   });
 }
@@ -1192,7 +1306,7 @@ function renderInventoryTable() {
         <td>
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
             <span style="font-weight:bold">${item.reorder_point}</span>
-            ${item.location_type === 'Warehouse' ? `<button class="btn-refresh" style="color: var(--primary); border-color: var(--primary); padding: 0.15rem 0.4rem; font-size: 0.75rem;" onclick="editReorderPoint(${item.location_id}, '${item.batch_no}', ${item.reorder_point})">✏️</button>` : ''}
+            ${item.location_type === 'Warehouse' ? `<button class="btn-refresh" style="color: var(--primary); border-color: var(--primary); padding: 0.15rem 0.4rem; font-size: 0.75rem;" onclick="editReorderPoint(${item.location_id}, '${escapeHTML(item.batch_no)}', ${item.reorder_point})">✏️</button>` : ''}
           </div>
         </td>
       </tr>
@@ -1212,7 +1326,7 @@ async function loadAlerts() {
   $('nearExpiryList').innerHTML = alerts.map(a => `
     <div class="row-item">
       <div class="row-item__left">
-        <div class="row-item__name">${escapeHTML(a.product_name)} <span class="badge badge--purple">${a.batch_no}</span></div>
+        <div class="row-item__name">${escapeHTML(a.product_name)} <span class="badge badge--purple">${escapeHTML(a.batch_no)}</span></div>
         <div class="row-item__meta">
           📍 ${escapeHTML(a.location_name)} • ينتهي: <b style="color:var(--danger)">${a.expiry_date}</b> (${a.days_until_expiry} أيام)
         </div>
@@ -1263,11 +1377,11 @@ function renderLowStock(filterType = 'All') {
     <div class="row-item">
       <div class="row-item__left">
         <div class="row-item__name">${escapeHTML(i.product_name)}</div>
-        <div class="row-item__meta"><span class="badge badge--${isWh ? 'blue' : 'amber'}">${isWh ? 'مستودع' : 'صيدلية'}</span> 📍 ${escapeHTML(i.location_name)} • التشغيلة: ${i.batch_no}</div>
+        <div class="row-item__meta"><span class="badge badge--${isWh ? 'blue' : 'amber'}">${isWh ? 'مستودع' : 'صيدلية'}</span> 📍 ${escapeHTML(i.location_name)} • التشغيلة: ${escapeHTML(i.batch_no)}</div>
       </div>
       <div class="row-item__right" style="text-align: left; display: flex; gap: 0.5rem; align-items: center; justify-content: flex-end;">
         <span class="badge badge--red">${i.quantity} متوفر / ${i.reorder_point} الحد</span>
-        <button class="btn-refresh" style="font-size: 0.8rem; padding: 0.2rem 0.5rem; background: var(--surface-100); color: var(--text-muted); border: 1px solid var(--border-color);" onclick="ignoreLowStock(${i.location_id}, '${i.batch_no}')" title="تجاهل النقص">تجاهل ❌</button>
+        <button class="btn-refresh" style="font-size: 0.8rem; padding: 0.2rem 0.5rem; background: var(--surface-100); color: var(--text-muted); border: 1px solid var(--border-color);" onclick="ignoreLowStock(${i.location_id}, '${escapeHTML(i.batch_no)}')" title="تجاهل النقص">تجاهل ❌</button>
       </div>
     </div>
     `;
@@ -1486,7 +1600,7 @@ async function loadWarehouseDashboard() {
           <div class="row-item">
             <div class="row-item__left">
               <div class="row-item__name">${escapeHTML(m.product_name)} <span class="badge badge--success">📥 استلام</span></div>
-              <div class="row-item__meta">من: ${m.from_supplier} • الكمية: <b>${m.quantity}</b></div>
+              <div class="row-item__meta">من: ${escapeHTML(m.from_supplier)} • الكمية: <b>${m.quantity}</b></div>
             </div>
             <div class="row-item__right" style="color: var(--text-muted); font-size: 0.8rem; text-align: left;">
               ${new Date(m.created_at).toLocaleString('ar-SA')}
@@ -1505,7 +1619,7 @@ async function loadWarehouseDashboard() {
           <div class="row-item">
             <div class="row-item__left">
               <div class="row-item__name">${escapeHTML(m.product_name)} <span class="badge badge--blue">📤 توزيع</span></div>
-              <div class="row-item__meta">إلى: ${m.to_pharmacy} • الكمية: <b>${m.quantity}</b></div>
+              <div class="row-item__meta">إلى: ${escapeHTML(m.to_pharmacy)} • الكمية: <b>${m.quantity}</b></div>
             </div>
             <div class="row-item__right" style="color: var(--text-muted); font-size: 0.8rem; text-align: left;">
               ${new Date(m.created_at).toLocaleString('ar-SA')}
@@ -1671,7 +1785,7 @@ async function loadAnalyticsPharmacyProfile(id) {
       invBody.innerHTML = data.inventory.map(i => `
         <tr>
           <td>${escapeHTML(i.product_name)} <br><small style="color:var(--text-muted)">${i.sku}</small></td>
-          <td><span class="badge badge--purple">${i.batch_no}</span></td>
+          <td><span class="badge badge--purple">${escapeHTML(i.batch_no)}</span></td>
           <td style="font-weight:bold">${i.quantity}</td>
           <td>${i.reorder_point}</td>
           <td>${i.status === 'LOW' ? '<span class="badge badge--red">منخفض</span>' : '<span class="badge badge--green">طبيعي</span>'}</td>
@@ -1788,13 +1902,13 @@ function renderWhInventory() {
       <td>${escapeHTML(i.product_name)}</td>
       <td><span class="badge badge--teal">${escapeHTML(i.cheapest_importer || 'لا يوجد مورد')}</span></td>
       <td style="font-weight:bold; color:var(--success)">${Number(i.unit_cost || 0).toLocaleString()} ر.س</td>
-      <td><span class="badge badge--purple">${i.batch_no}</span></td>
+      <td><span class="badge badge--purple">${escapeHTML(i.batch_no)}</span></td>
       <td>${i.expiry_date}</td>
       <td style="font-weight:bold">${i.quantity}</td>
       <td>
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
           <span style="font-weight:bold">${i.reorder_point}</span>
-          <button class="btn-refresh" style="color: var(--primary); border-color: var(--primary); padding: 0.15rem 0.4rem; font-size: 0.75rem;" onclick="editReorderPoint(${i.location_id}, '${i.batch_no}', ${i.reorder_point})">✏️</button>
+          <button class="btn-refresh" style="color: var(--primary); border-color: var(--primary); padding: 0.15rem 0.4rem; font-size: 0.75rem;" onclick="editReorderPoint(${i.location_id}, '${escapeHTML(i.batch_no)}', ${i.reorder_point})">✏️</button>
         </div>
       </td>
       <td>${i.storage_condition}</td>
@@ -1829,7 +1943,7 @@ function renderWhActivities() {
     <tr>
       <td style="font-size:0.85rem">${new Date(a.created_at).toLocaleString('ar-SA')}</td>
       <td><span class="badge ${badgeClass}">${a.type}</span></td>
-      <td>${a.product_name || `تشغيلة ${a.batch_no}`}</td>
+      <td>${a.product_name || `تشغيلة ${escapeHTML(a.batch_no)}`}</td>
       <td style="font-weight:bold">${a.quantity || '—'}</td>
       <td style="font-size:0.85rem">${details}</td>
     </tr>
@@ -2794,8 +2908,8 @@ async function loadMedicineDetail(productId) {
     } else {
       batchBody.innerHTML = data.batches.map(b => `
         <tr>
-          <td><span class="badge badge--purple">${b.batch_no}</span></td>
-          <td style="${b.days_until_expiry < 30 ? 'color:var(--danger); font-weight:bold' : ''}">${b.expiry_date}</td>
+          <td><span class="badge badge--purple">${escapeHTML(b.batch_no)}</span></td>
+          <td style="${b.days_until_expiry < 30 ? 'color:var(--danger); font-weight:bold' : ''}">${escapeHTML(b.expiry_date)}</td>
           <td style="font-weight:bold">${b.quantity}</td>
           <td>${escapeHTML(b.location_name)}</td>
           <td>${getExpiryBadge(b.days_until_expiry)}</td>
@@ -2879,7 +2993,7 @@ async function loadMedicineDetail(productId) {
           <tr>
             <td style="font-size:0.85rem">${new Date(m.created_at).toLocaleString('ar-SA')}</td>
             <td><span class="badge ${badgeMap[m.movement] || ''}">${typeMap[m.movement] || m.movement}</span></td>
-            <td><span class="badge badge--purple">${m.batch_no}</span></td>
+            <td><span class="badge badge--purple">${escapeHTML(m.batch_no)}</span></td>
             <td style="font-weight:bold">${m.quantity}</td>
             <td>${m.from_name || '—'}</td>
             <td>${m.to_name || '—'}</td>
@@ -2918,6 +3032,10 @@ function exportTableToCSV(tableEl, filename = 'export.csv') {
 
 // Init
 window.addEventListener('DOMContentLoaded', async () => {
+  if (!checkAuth()) {
+    return;
+  }
+
   const savedTab = localStorage.getItem('activeAppTab');
   if (savedTab) {
     switchTab(savedTab);

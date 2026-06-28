@@ -19,12 +19,11 @@ const PORT = process.env.PORT || 3000;
 
 // ─── Auto Setup ───────────────────────────────────────────────────────
 try {
-  // Check if migrated
-  const migrationCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='_migrations'").get();
-  if (!migrationCheck) {
-    console.log('📦 First run detected. Auto-migrating database...');
-    require('child_process').execSync('npm run migrate', { stdio: 'inherit' });
-  }
+  console.log('📦 Auto-migrating database...');
+  require('child_process').execSync('npm run migrate', { stdio: 'inherit' });
+
+  // Seed default admin user
+  require('./lib/auth').seedDefaultUser();
 } catch (err) {
   console.error('✖ Auto-setup failed:', err);
 }
@@ -42,7 +41,14 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ─── Route modules ────────────────────────────────────────────────────
+// ─── Auth routes (unprotected) ────────────────────────────────────────
+app.use('/api/auth', require('./api/auth'));
+
+// ─── Authenticate middleware for rest of api ──────────────────────────
+const { authenticate } = require('./api/middleware');
+app.use('/api', authenticate);
+
+// ─── Route modules (protected) ────────────────────────────────────────
 app.use('/api/products',   require('./api/products'));
 app.use('/api/batches',    require('./api/batches'));
 app.use('/api/locations',  require('./api/locations'));

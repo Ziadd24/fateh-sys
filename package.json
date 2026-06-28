@@ -9,7 +9,8 @@
     "seed": "node db/seed.js",
     "check:expiry": "node workers/expiry-alert.js",
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node --test tests/e2e.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

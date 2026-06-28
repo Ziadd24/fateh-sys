@@ -21,6 +21,23 @@ const {
 
 const router = Router();
 
+function validateItemsArray(req, res, next) {
+  const { items } = req.body;
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ success: false, error: 'Items array is required' });
+  }
+  for (const item of items) {
+    item.qty = parseInt(item.qty, 10);
+    if (isNaN(item.qty) || item.qty <= 0) {
+      return res.status(400).json({ success: false, error: 'All item quantities must be positive integers' });
+    }
+    if (item.reorderPoint !== undefined) item.reorderPoint = parseInt(item.reorderPoint || 0, 10);
+    if (item.price !== undefined) item.price = parseFloat(item.price || 0.0);
+  }
+  next();
+}
+
+
 router.post('/receive',
   requireFields('location_id', 'batch_no', 'quantity'),
   requirePositiveInt('quantity'),
@@ -61,16 +78,9 @@ router.post('/transfer',
 
 router.post('/company-to-warehouse',
   requireFields('supplier_id', 'warehouse_id', 'items'),
+  validateItemsArray,
   asyncHandler((req, res) => {
     const { supplier_id, warehouse_id, items, note } = req.body;
-    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ success: false, error: 'Items array is required' });
-    
-    for (const item of items) {
-      item.qty = parseInt(item.qty, 10);
-      if (isNaN(item.qty) || item.qty <= 0) return res.status(400).json({ success: false, error: 'All item quantities must be positive integers' });
-      item.reorderPoint = parseInt(item.reorderPoint || 0, 10);
-      item.price = parseFloat(item.price || 0.0);
-    }
 
     try {
       const result = receiveFromCompanyBulk(supplier_id, warehouse_id, items, note);
@@ -83,14 +93,9 @@ router.post('/company-to-warehouse',
 
 router.post('/warehouse-to-pharmacy',
   requireFields('warehouse_id', 'pharmacy_id', 'items'),
+  validateItemsArray,
   asyncHandler((req, res) => {
     const { warehouse_id, pharmacy_id, items, note } = req.body;
-    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ success: false, error: 'Items array is required' });
-    
-    for (const item of items) {
-      item.qty = parseInt(item.qty, 10);
-      if (isNaN(item.qty) || item.qty <= 0) return res.status(400).json({ success: false, error: 'All item quantities must be positive integers' });
-    }
 
     try {
       const result = dispatchToPharmacyBulk(warehouse_id, pharmacy_id, items, note);
