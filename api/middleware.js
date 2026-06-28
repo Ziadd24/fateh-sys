@@ -50,4 +50,23 @@ function requireFields(...fields) {
   };
 }
 
-module.exports = { asyncHandler, errorHandler, requireFields };
+/**
+ * Validates that specified fields in req.body are positive integers. Returns 400 if invalid.
+ */
+function requirePositiveInt(...fields) {
+  return (req, res, next) => {
+    for (const field of fields) {
+      if (req.body[field] !== undefined && req.body[field] !== null) {
+        const parsed = parseInt(req.body[field], 10);
+        if (isNaN(parsed) || parsed <= 0) {
+          return res.status(400).json({ success: false, error: `${field} must be a positive integer` });
+        }
+        // Store the parsed value back in the body so routes don't have to re-parse it
+        req.body[field] = parsed;
+      }
+    }
+    next();
+  };
+}
+
+module.exports = { asyncHandler, errorHandler, requireFields, requirePositiveInt };

@@ -312,25 +312,29 @@ router.get('/importers', (req, res) => {
     // 1. Leaderboard & Profiles
     const importersRows = db.prepare(`
         SELECT l.location_id, l.name, l.address,
-               COALESCE(AVG(o.accuracy_score), 0) as avg_accuracy,
-               COUNT(o.request_id) as total_orders,
-               SUM(o.total_cost) as total_spent,
                (
                  SELECT COUNT(*) 
                  FROM supplier_offer so 
                  WHERE so.supplier_id = l.location_id
                ) as total_products,
                (
+                 SELECT COUNT(*) 
+                 FROM supplier_offer so 
+                 WHERE so.supplier_id = l.location_id
+                   AND (SELECT COUNT(*) FROM supplier_offer WHERE product_id = so.product_id) > 1
+               ) as mutual_products_count,
+               (
                  SELECT COUNT(*)
                  FROM supplier_offer so1
                  WHERE so1.supplier_id = l.location_id
+                   AND (SELECT COUNT(*) FROM supplier_offer WHERE product_id = so1.product_id) > 1
                    AND so1.price = (
                        SELECT MIN(so2.price)
                        FROM supplier_offer so2
                        JOIN location l2 ON so2.supplier_id = l2.location_id AND l2.is_active = 1
                        WHERE so2.product_id = so1.product_id
                    )
-               ) as cheap_products_count,
+               ) as cheap_mutual_products_count,
                (
                  SELECT COUNT(*)
                  FROM supplier_offer so_exc
@@ -348,93 +352,140 @@ router.get('/importers', (req, res) => {
                  JOIN product p ON so_n.product_id = p.product_id
                  WHERE so_n.supplier_id = l.location_id
                ) as medicine_names,
-               COALESCE(AVG(CASE WHEN o.expected_delivery_date IS NOT NULL THEN
-                   CASE WHEN o.fulfilled_at <= o.expected_delivery_date THEN 100.0 ELSE 0.0 END
-               ELSE NULL END), 0) as delivery_rating
+               (
+                 SELECT COALESCE(SUM(sm.quantity), 0)
+                 FROM stock_movement sm
+                 WHERE sm.from_location = l.location_id AND sm.movement = 'TRANSFER'
+               ) as total_volume,
+               (
+                 SELECT COALESCE(SUM(sm.quantity * p.unit_cost), 0)
+                 FROM stock_movement sm
+                 JOIN batch b ON sm.batch_no = b.batch_no
+                 JOIN product p ON b.product_id = p.product_id
+                 WHERE sm.from_location = l.location_id AND sm.movement = 'TRANSFER'
+               ) as total_spent
         FROM location l
-        LEFT JOIN order_request o ON l.location_id = o.supplier_id AND o.status = 'FULFILLED'
         WHERE l.type = 'Supplier' AND l.is_active = 1
         GROUP BY l.location_id
     `).all();
 
-    // Calculate a combined rank score (0-100)
-    // - Accuracy is out of 100
-    // - Price score is % of products where they are the cheapest (out of 100)
-    // Simple average of the two for demo purposes
-    const importers = importersRows.map(i => {
-        let priceRating = (i.total_products > 0) ? Math.round((i.cheap_products_count / i.total_products) * 100) : 50; 
-        let deliveryRating = Math.round(i.delivery_rating);
-        
-        let rank_score = 0;
-        
-        // Only give them a high rank score if they have actually fulfilled orders
-        if (i.total_orders > 0) {
-            rank_score = Math.round((i.avg_accuracy + priceRating + deliveryRating) / 3);
-        } else {
-            // No orders yet? They get a default score of 0 so they don't jump to the top
-            rank_score = 0; 
-            i.avg_accuracy = 0; 
-            deliveryRating = 0; 
-        }
+    // Calculate max values for normalization
+    const maxVolume = Math.max(...importersRows.map(i => i.total_volume), 1);
+    const maxProducts = Math.max(...importersRows.map(i => i.total_products), 1);
 
-        return { ...i, rank_score, delivery_score: deliveryRating, price_score: priceRating };
+    // Calculate rating (0-100) based on weighted score
+    const importers = importersRows.map(i => {
+        const priceScore = (i.mutual_products_count > 0) ? Math.round((i.cheap_mutual_products_count / i.mutual_products_count) * 100) : 0; 
+        const volumeScore = Math.round((i.total_volume / maxVolume) * 100);
+        const diversityScore = Math.round((i.total_products / maxProducts) * 100);
+        
+        const totalScore = Math.round((priceScore * 0.4) + (volumeScore * 0.4) + (diversityScore * 0.2));
+        
+        // Map 0-100 to 1-5 stars
+        let stars = 1;
+        if (totalScore >= 80) stars = 5;
+        else if (totalScore >= 60) stars = 4;
+        else if (totalScore >= 40) stars = 3;
+        else if (totalScore >= 20) stars = 2;
+
+        return { 
+            ...i, 
+            rank_score: totalScore,
+            stars: stars,
+            price_score: priceScore, 
+            volume_score: volumeScore,
+            diversity_score: diversityScore,
+            total_orders: i.total_volume || 0,
+            total_spent: i.total_spent || 0 
+        };
     });
     
-    // Sort for leaderboard
-    importers.sort((a, b) => b.rank_score - a.rank_score);
+    // Sort for leaderboard: Primary rank by price score, secondary by total volume
+    // Exclude suppliers with 0 volume and 0 price score from being artificially high
+    importers.sort((a, b) => {
+        if (b.rank_score !== a.rank_score) return b.rank_score - a.rank_score;
+        return b.total_orders - a.total_orders;
+    });
     const top5 = importers.slice(0, 5);
 
-    // 2. Pricing Trends (Line Chart Data)
-    // Get the top 3 most common products across suppliers to chart
-    const topProducts = db.prepare(`
+    // 2. Comparison Data for Mutual Medicines
+    const mutualProducts = db.prepare(`
         SELECT p.product_id, p.name 
         FROM supplier_offer so
         JOIN product p ON so.product_id = p.product_id
         GROUP BY p.product_id
-        ORDER BY COUNT(so.supplier_id) DESC
-        LIMIT 3
+        HAVING COUNT(so.supplier_id) > 1
     `).all();
 
-    const pricingTrends = {};
-    for (const p of topProducts) {
-        const history = db.prepare(`
-            SELECT h.price, date(h.recorded_at) as date_val, l.name as supplier_name
-            FROM supplier_price_history h
-            JOIN location l ON h.supplier_id = l.location_id
-            WHERE h.product_id = ?
-            ORDER BY h.recorded_at ASC
+    const comparisonData = {};
+    for (const p of mutualProducts) {
+        const suppliersInfo = db.prepare(`
+            SELECT 
+                l.name as supplier_name,
+                so.price,
+                so.condition,
+                (
+                  SELECT COALESCE(SUM(sm.quantity), 0)
+                  FROM stock_movement sm
+                  JOIN batch b ON sm.batch_no = b.batch_no
+                  WHERE sm.from_location = l.location_id 
+                    AND sm.movement = 'TRANSFER'
+                    AND b.product_id = so.product_id
+                ) as historical_volume
+            FROM supplier_offer so
+            JOIN location l ON so.supplier_id = l.location_id AND l.is_active = 1
+            WHERE so.product_id = ?
+            ORDER BY so.price ASC
         `).all(p.product_id);
-        pricingTrends[p.name] = history;
+        
+        comparisonData[p.name] = suppliersInfo;
     }
-
-    // 3. Best Current Deals
-    const bestDeals = db.prepare(`
-        SELECT p.name as product_name, l.name as supplier_name, so.price,
-               (
-                 SELECT AVG(so2.price) FROM supplier_offer so2
-                 JOIN location l2 ON so2.supplier_id = l2.location_id AND l2.is_active = 1
-                 WHERE so2.product_id = p.product_id
-               ) as avg_price
-        FROM supplier_offer so
-        JOIN product p ON so.product_id = p.product_id
-        JOIN location l ON so.supplier_id = l.location_id AND l.is_active = 1
-        WHERE so.price < (
-            SELECT AVG(so3.price) FROM supplier_offer so3
-            JOIN location l3 ON so3.supplier_id = l3.location_id AND l3.is_active = 1
-            WHERE so3.product_id = p.product_id
-        ) * 0.9 -- 10% below average among active suppliers
-        ORDER BY (avg_price - so.price) DESC
-        LIMIT 10
-    `).all();
 
     res.json({
         leaderboard: top5,
         all_profiles: importers,
-        pricingTrends,
-        bestDeals
+        comparisonData
     });
 });
 
+// GET /api/analytics/importers/:id - Detailed Profile for a specific Importer
+router.get('/importers/:id', (req, res) => {
+    const locationId = req.params.id;
+    
+    // 1. Basic Info
+    const importer = db.prepare(`SELECT * FROM location WHERE location_id = ? AND type = 'Supplier'`).get(locationId);
+    if (!importer) return res.status(404).json({ error: 'Importer not found' });
+
+    // 2. Active Offers
+    const offers = db.prepare(`
+        SELECT so.*, p.name as product_name, p.sku 
+        FROM supplier_offer so
+        JOIN product p ON so.product_id = p.product_id
+        WHERE so.supplier_id = ?
+    `).all(locationId);
+
+    // 3. Receipt History (from stock_movement)
+    const orders = db.prepare(`
+        SELECT sm.movement_id as request_id, 
+               sm.created_at,
+               sm.quantity,
+               p.name as product_name,
+               l.name as destination_name,
+               (sm.quantity * p.unit_cost) as total_cost
+        FROM stock_movement sm
+        JOIN batch b ON sm.batch_no = b.batch_no
+        JOIN product p ON b.product_id = p.product_id
+        JOIN location l ON sm.to_location = l.location_id
+        WHERE sm.from_location = ? AND sm.movement = 'TRANSFER'
+        ORDER BY sm.created_at DESC
+    `).all(locationId);
+
+    res.json({
+        profile: importer,
+        offers,
+        orders
+    });
+});
 
 // GET /api/analytics/medicines - Drill-down data for Medicines
 router.get('/medicines', (req, res) => {

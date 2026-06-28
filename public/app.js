@@ -119,12 +119,31 @@ function switchCategory(category) {
   const pDbEl = $('pharmacy-dashboard');
   const wDbEl = $('warehouse-dashboard');
   const sDbEl = $('supplier-dashboard');
+  const mainInvContainer = $('main-inventory-container');
+  const pDetailedStats = $('pharmacy-detailed-stats');
+  const pInvFilters = $('pharmacyInventoryFilters');
   
   if (pDbEl) pDbEl.style.display = (category === 'Pharmacy') ? 'block' : 'none';
-  if (wDbEl) wDbEl.style.display = (category === 'Warehouse') ? 'block' : 'none';
+  if (pDetailedStats) pDetailedStats.style.display = (category === 'Pharmacy') ? 'block' : 'none';
+  if (pInvFilters) pInvFilters.style.display = (category === 'Pharmacy') ? 'flex' : 'none';
   
-  // Re-render inventory table to filter items matching the location type
-  renderInventoryTable();
+  if (wDbEl) wDbEl.style.display = (category === 'Warehouse') ? 'block' : 'none';
+  if (sDbEl) sDbEl.style.display = (category === 'Supplier') ? 'block' : 'none';
+  if (mainInvContainer) mainInvContainer.style.display = (category === 'Supplier') ? 'none' : 'block';
+  
+  if (category !== 'Pharmacy') {
+    const filterPh = $('filterPharmacySelect');
+    const filterMed = $('filterMedicineSelect');
+    if (filterPh) filterPh.value = '';
+    if (filterMed) filterMed.value = '';
+  }
+
+  if (category === 'Supplier') {
+    loadSupplierDashboard();
+  } else {
+    // Re-render inventory table to filter items matching the location type
+    renderInventoryTable();
+  }
 }
 
 async function api(path, options = {}) {
@@ -250,12 +269,18 @@ function renderDefinedBatches() {
 
 function populateDropdowns() {
   const populate = (sel, html) => document.querySelectorAll(sel).forEach(s => s.innerHTML = html);
+  
+  const buildOptions = (items, valueKey, labelFn, defaultText) => {
+    let html = defaultText ? `<option value="">${defaultText}</option>` : '';
+    html += items.map(i => `<option value="${i[valueKey]}">${escapeHTML(labelFn(i))}</option>`).join('');
+    return html;
+  };
 
-  const locOptions = `<option value="">اختر الفرع / الموقع</option>` + state.locations.map(l => `<option value="${l.location_id}">${escapeHTML(l.name)}</option>`).join('');
-  const phOptionsOnly = `<option value="">اختر الصيدلية المستقبلة</option>` + state.locations.filter(l => l.type === 'Pharmacy').map(l => `<option value="${l.location_id}">${escapeHTML(l.name)}</option>`).join('');
-  const phSourceOptions = `<option value="">اختر الصيدلية</option>` + state.locations.filter(l => l.type === 'Pharmacy').map(l => `<option value="${l.location_id}">${escapeHTML(l.name)}</option>`).join('');
-  const internalOptions = `<option value="">اختر الفرع / المستودع</option>` + state.locations.filter(l => l.type === 'Pharmacy' || l.type === 'Warehouse').map(l => `<option value="${l.location_id}">${escapeHTML(l.name)}</option>`).join('');
-  const prodOptions = `<option value="">اختر الدواء</option>` + state.products.map(p => `<option value="${p.product_id}">${escapeHTML(p.name)} (${p.sku})</option>`).join('');
+  const locOptions = buildOptions(state.locations, 'location_id', l => l.name, 'اختر الفرع / الموقع');
+  const phOptionsOnly = buildOptions(state.locations.filter(l => l.type === 'Pharmacy'), 'location_id', l => l.name, 'اختر الصيدلية المستقبلة');
+  const phSourceOptions = buildOptions(state.locations.filter(l => l.type === 'Pharmacy'), 'location_id', l => l.name, 'اختر الصيدلية');
+  const internalOptions = buildOptions(state.locations.filter(l => l.type === 'Pharmacy' || l.type === 'Warehouse'), 'location_id', l => l.name, 'اختر الفرع / المستودع');
+  const prodOptions = buildOptions(state.products, 'product_id', p => `${p.name} (${p.sku})`, 'اختر الدواء');
   
   populate('.select-location', locOptions);
   populate('.select-pharmacy-only', phOptionsOnly);
@@ -263,12 +288,57 @@ function populateDropdowns() {
   populate('.select-internal', internalOptions);
   populate('.select-product', prodOptions);
 
+  // Populate category dropdown
+  const categorySelect = $('productCategorySelect');
+  if (categorySelect) {
+    const currentVal = categorySelect.value;
+    
+    const DEFAULT_CATEGORIES = [
+      'مضاد حيوي',
+      'فيتامين ه + سيلينوم',
+      'فيتامين أد٣ه',
+      'املاح معدنية',
+      'منشط كبدى',
+      'منشط نمو',
+      'بخاخ جروح',
+      'فيتامين سي',
+      'غسيل كلوي',
+      'طفيليات الدم',
+      'مضاد التهاب',
+      'خافض حرارة'
+    ];
+    
+    let catHtml = '<option value="" disabled selected>اختر الفئة...</option>';
+    catHtml += DEFAULT_CATEGORIES.map(cat => `<option value="${escapeHTML(cat)}">${escapeHTML(cat)}</option>`).join('');
+    catHtml += '<option value="__NEW__">➕ إضافة فئة جديدة...</option>';
+    
+    categorySelect.innerHTML = catHtml;
+    if (currentVal && (DEFAULT_CATEGORIES.includes(currentVal) || currentVal === '__NEW__')) {
+      categorySelect.value = currentVal;
+    }
+  }
+
+
+  const filterPhVal = $('filterPharmacySelect')?.value || '';
+  const filterMedVal = $('filterMedicineSelect')?.value || '';
+
+  const filterPhOptions = buildOptions(state.locations.filter(l => l.type === 'Pharmacy'), 'location_id', l => l.name, 'جميع الصيدليات');
+  const filterMedsOptions = buildOptions(state.products, 'product_id', p => `${p.name} (${p.sku})`, 'جميع الأدوية');
+  
+  populate('#filterPharmacySelect', filterPhOptions);
+  populate('#filterMedicineSelect', filterMedsOptions);
+
+  if ($('filterPharmacySelect')) $('filterPharmacySelect').value = filterPhVal;
+  if ($('filterMedicineSelect')) $('filterMedicineSelect').value = filterMedVal;
+
   const batSelects = document.querySelectorAll('.select-batch, .select-batch-required');
 
-  if ($('globalProductList')) $('globalProductList').innerHTML = state.products.map(p => `<option value="${escapeHTML(p.name)} (${p.sku})" data-id="${p.product_id}"></option>`).join('');
-  if ($('globalSupplierList')) $('globalSupplierList').innerHTML = state.locations.filter(l => l.type === 'Supplier').map(l => `<option value="${escapeHTML(l.name)}" data-id="${l.location_id}"></option>`).join('');
-  if ($('globalWarehouseList')) $('globalWarehouseList').innerHTML = state.locations.filter(l => l.type === 'Warehouse').map(l => `<option value="${escapeHTML(l.name)}" data-id="${l.location_id}"></option>`).join('');
-  if ($('globalPharmacyList')) $('globalPharmacyList').innerHTML = state.locations.filter(l => l.type === 'Pharmacy').map(l => `<option value="${escapeHTML(l.name)}" data-id="${l.location_id}"></option>`).join('');
+  const buildDatalist = (items, valueFn, idKey) => items.map(i => `<option value="${escapeHTML(valueFn(i))}" data-id="${i[idKey]}"></option>`).join('');
+
+  if ($('globalProductList')) $('globalProductList').innerHTML = buildDatalist(state.products, p => `${p.name} (${p.sku})`, 'product_id');
+  if ($('globalSupplierList')) $('globalSupplierList').innerHTML = buildDatalist(state.locations.filter(l => l.type === 'Supplier'), l => l.name, 'location_id');
+  if ($('globalWarehouseList')) $('globalWarehouseList').innerHTML = buildDatalist(state.locations.filter(l => l.type === 'Warehouse'), l => l.name, 'location_id');
+  if ($('globalPharmacyList')) $('globalPharmacyList').innerHTML = buildDatalist(state.locations.filter(l => l.type === 'Pharmacy'), l => l.name, 'location_id');
 
   // Auto-fill the default warehouse to save time
   const whs = state.locations.filter(l => l.type === 'Warehouse');
@@ -290,31 +360,99 @@ function populateDropdowns() {
   document.querySelectorAll('form').forEach(form => {
     let pSelect = form.querySelector('.select-product');
     let bSelect = form.querySelector('.select-batch, .select-batch-required');
-    let locSelect = form.querySelector('.select-location');
+    let locSelect = form.querySelector('.select-location, .select-pharmacy-source, .select-internal');
 
-    if (pSelect && bSelect) {
+    if (pSelect) {
       pSelect.replaceWith(pSelect.cloneNode(true));
       pSelect = form.querySelector('.select-product');
 
       if (locSelect) {
         locSelect.replaceWith(locSelect.cloneNode(true));
-        locSelect = form.querySelector('.select-location');
+        locSelect = form.querySelector('.select-location, .select-pharmacy-source, .select-internal');
+      }
+      
+      if (bSelect) {
+        bSelect.replaceWith(bSelect.cloneNode(true));
+        bSelect = form.querySelector('.select-batch, .select-batch-required');
       }
 
+      const updateStockIndicator = () => {
+        const stockIndicator = form.querySelector('.stock-indicator');
+        const stockAmount = form.querySelector('.stock-amount');
+        const qtyInput = form.querySelector('input[name="quantity"]');
+        if (!stockIndicator || !stockAmount) return;
+
+        const locId = locSelect ? parseInt(locSelect.value, 10) : null;
+        const pId = pSelect ? parseInt(pSelect.value, 10) : null;
+        const batchNo = bSelect ? bSelect.value : null;
+
+        if (!locId || !pId) {
+          stockIndicator.style.display = 'none';
+          if (qtyInput) {
+            qtyInput.removeAttribute('max');
+          }
+          return;
+        }
+
+        let stockQty = 0;
+        if (batchNo) {
+          const stockItem = state.inventory.find(i => i.location_id === locId && i.product_id === pId && i.batch_no === batchNo);
+          stockQty = stockItem ? stockItem.quantity : 0;
+        } else {
+          const locInv = state.inventory.filter(i => i.location_id === locId && i.product_id === pId);
+          stockQty = locInv.reduce((sum, i) => sum + i.quantity, 0);
+        }
+
+        stockAmount.textContent = stockQty;
+        stockIndicator.style.display = 'inline';
+        if (qtyInput) {
+          qtyInput.setAttribute('max', stockQty);
+        }
+      };
+
+      const updateProducts = () => {
+        if (!locSelect) return;
+        const locId = parseInt(locSelect.value, 10);
+        let availableProducts = state.products;
+        let productStocks = {};
+
+        if (locId) {
+          const locInv = state.inventory.filter(i => i.location_id === locId && i.quantity > 0);
+          locInv.forEach(item => {
+            productStocks[item.product_id] = (productStocks[item.product_id] || 0) + item.quantity;
+          });
+          const availableProductIds = new Set(locInv.map(i => i.product_id));
+          availableProducts = state.products.filter(p => availableProductIds.has(p.product_id));
+        }
+
+        const currentPId = pSelect.value;
+        const defaultOption = `<option value="">اختر الدواء</option>`;
+        pSelect.innerHTML = defaultOption + availableProducts.map(p => {
+          const stockText = locId && productStocks[p.product_id] !== undefined ? ` [المتوفر: ${productStocks[p.product_id]}]` : '';
+          return `<option value="${p.product_id}">${escapeHTML(p.name)} (${escapeHTML(p.sku)})${stockText}</option>`;
+        }).join('');
+
+        if (currentPId && availableProducts.some(p => p.product_id.toString() === currentPId)) {
+          pSelect.value = currentPId;
+        } else {
+          pSelect.value = "";
+        }
+        
+        if (bSelect) updateBatches();
+        else updateStockIndicator();
+      };
+
       const updateBatches = () => {
-        bSelect = form.querySelector('.select-batch, .select-batch-required');
+        if (!bSelect) return;
         const pId = parseInt(pSelect.value, 10);
-        let locId = null;
-        if (locSelect) locId = parseInt(locSelect.value, 10);
+        let locId = locSelect ? parseInt(locSelect.value, 10) : null;
 
         let availableBatches = [];
         if (pId) {
-          // If location is selected, filter by inventory that has > 0 stock in that location
           if (locId) {
             const locInv = state.inventory.filter(i => i.location_id === locId && i.product_id === pId && i.quantity > 0);
-            availableBatches = locInv.map(i => ({ batch_no: i.batch_no, expiry_date: i.expiry_date }));
+            availableBatches = locInv.map(i => ({ batch_no: i.batch_no, expiry_date: i.expiry_date, quantity: i.quantity }));
           } else {
-            // Fallback to all batches if no location context
             availableBatches = state.batches.filter(b => b.product_id === pId);
           }
         }
@@ -322,12 +460,25 @@ function populateDropdowns() {
         const defaultOption = bSelect.classList.contains('select-batch-required') 
           ? `<option value="">-- اختر التشغيلة --</option>`
           : `<option value="">-- تلقائي (FIFO) --</option>`;
-        bSelect.innerHTML = defaultOption + availableBatches.map(b => `<option value="${b.batch_no}">${b.batch_no} (ينتهي ${b.expiry_date || ''})</option>`).join('');
+        bSelect.innerHTML = defaultOption + availableBatches.map(b => {
+          const qtyText = b.quantity !== undefined ? ` [المتوفر: ${b.quantity}]` : '';
+          return `<option value="${b.batch_no}">${escapeHTML(b.batch_no)} (ينتهي ${escapeHTML(b.expiry_date || '')})${qtyText}</option>`;
+        }).join('');
+
+        updateStockIndicator();
       };
 
-      pSelect.addEventListener('change', updateBatches);
       if (locSelect) {
-        locSelect.addEventListener('change', updateBatches);
+        locSelect.addEventListener('change', () => {
+          updateProducts();
+        });
+        // Initial setup for products if location is pre-filled
+        if (locSelect.value) updateProducts();
+      }
+
+      pSelect.addEventListener('change', updateBatches);
+      if (bSelect) {
+        bSelect.addEventListener('change', updateStockIndicator);
       }
     }
   });
@@ -337,9 +488,9 @@ function populateDropdowns() {
   const pharmacies = state.locations.filter(l => l.type === 'Pharmacy');
 
   const getSupplierStars = (level) => level ? '⭐'.repeat(level) : '';
-  const supOptions = `<option value="">اختر الشركة الموردة</option>` + suppliers.map(l => `<option value="${l.location_id}">${escapeHTML(l.name)} ${getSupplierStars(l.importance_level)}</option>`).join('');
-  const whOptions = `<option value="">اختر المستودع</option>` + warehouses.map(l => `<option value="${l.location_id}">${escapeHTML(l.name)}</option>`).join('');
-  const phOptions = `<option value="">اختر الصيدلية</option>` + pharmacies.map(l => `<option value="${l.location_id}">${escapeHTML(l.name)}</option>`).join('');
+  const supOptions = buildOptions(suppliers, 'location_id', l => `${l.name} ${getSupplierStars(l.importance_level)}`, 'اختر الشركة الموردة');
+  const whOptions = buildOptions(warehouses, 'location_id', l => l.name, 'اختر المستودع');
+  const phOptions = buildOptions(pharmacies, 'location_id', l => l.name, 'اختر الصيدلية');
 
   populate('.select-supplier', supOptions);
   populate('.select-warehouse', whOptions);
@@ -642,11 +793,48 @@ async function adminAddProduct(e) {
   e.preventDefault();
   const form = e.target;
   const data = Object.fromEntries(new FormData(form));
+  
+  if (data.category === '__NEW__') {
+    const newCatInput = $('newCategoryInput');
+    const newCatVal = newCatInput ? newCatInput.value.trim() : '';
+    if (!newCatVal) {
+      showToast('يرجى إدخال اسم الفئة الجديدة', 'error');
+      return;
+    }
+    data.category = newCatVal;
+  }
+
   await api('/products', { method: 'POST', body: JSON.stringify(data) });
   showToast('تم تعريف الدواء بنجاح');
   form.reset();
+
+  const newCatGroup = $('newCategoryGroup');
+  if (newCatGroup) newCatGroup.style.display = 'none';
+  const newCatInput = $('newCategoryInput');
+  if (newCatInput) {
+    newCatInput.required = false;
+    newCatInput.value = '';
+  }
+
   loadAll();
 }
+
+function handleCategoryChange(selectElement) {
+  const newCatGroup = $('newCategoryGroup');
+  const newCatInput = $('newCategoryInput');
+  if (!newCatGroup || !newCatInput) return;
+  
+  if (selectElement.value === '__NEW__') {
+    newCatGroup.style.display = 'block';
+    newCatInput.required = true;
+    newCatInput.focus();
+  } else {
+    newCatGroup.style.display = 'none';
+    newCatInput.required = false;
+    newCatInput.value = '';
+  }
+}
+
 
 async function adminAddSupplier(e) {
   e.preventDefault();
@@ -782,8 +970,92 @@ function locationBadge(type) {
 }
 
 async function loadInventoryTable() {
-  state.inventory = await api('/inventory');
-  renderInventoryTable();
+  try {
+    state.inventory = await api('/inventory');
+    renderInventoryTable();
+  } catch(err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function loadSupplierDashboard() {
+  try {
+    const inv = state.inventory || [];
+    
+    // Group inventory by importer
+    const importerData = {};
+    let totalValue = 0;
+    
+    inv.forEach(item => {
+      const imp = item.cheapest_importer || 'غير معروف';
+      if (!importerData[imp]) importerData[imp] = { count: 0, value: 0, items: [] };
+      
+      const itemValue = (item.quantity || 0) * (item.unit_cost || 0);
+      importerData[imp].count += 1;
+      importerData[imp].value += itemValue;
+      importerData[imp].items.push(item);
+      totalValue += itemValue;
+    });
+    
+    const importers = Object.keys(importerData);
+    
+    // KPI 1: Importers in Stock
+    if ($('invSupplierCount')) $('invSupplierCount').textContent = importers.length;
+    
+    // KPI 2: Total Inventory Value from Importers
+    if ($('invSupplierTotalValue')) $('invSupplierTotalValue').textContent = totalValue.toLocaleString() + ' ر.س';
+    
+    // KPI 3: Top Contributing Importer
+    let topImporter = '—';
+    if (importers.length > 0) {
+      topImporter = importers.reduce((a, b) => importerData[a].value > importerData[b].value ? a : b);
+    }
+    if ($('invSupplierTop')) $('invSupplierTop').textContent = topImporter;
+    
+    // Render Table Grouped by Importer
+    const tbody = $('inventorySupplierTableBody');
+    if (tbody) {
+      if (inv.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="empty-state">لا يوجد مخزون متاح حالياً.</td></tr>`;
+      } else {
+        // Sort importers by value descending
+        const sortedImporters = importers.sort((a, b) => importerData[b].value - importerData[a].value);
+        
+        let html = '';
+        sortedImporters.forEach(imp => {
+          // Add a header row for the importer
+          html += `
+            <tr style="background-color: var(--surface); border-top: 2px solid var(--border);">
+              <td colspan="5" style="font-weight:bold; color: var(--amber); padding-top: 1rem;">
+                🏢 ${escapeHTML(imp)} 
+                <span style="font-size: 0.8rem; color: var(--text-muted); margin-right: 1rem;">
+                  (إجمالي القيمة: ${importerData[imp].value.toLocaleString()} ر.س)
+                </span>
+              </td>
+            </tr>
+          `;
+          
+          // Add rows for each item from this importer
+          importerData[imp].items.forEach(item => {
+            const itemValue = (item.quantity || 0) * (item.unit_cost || 0);
+            html += `
+              <tr>
+                <td></td>
+                <td style="font-weight:600;">${escapeHTML(item.product_name)} <span style="font-size:0.8rem;color:var(--text-muted);display:block;">${item.sku}</span></td>
+                <td><span class="badge badge--${item.quantity <= item.reorder_point ? 'red' : 'green'}">${item.quantity}</span></td>
+                <td>${escapeHTML(item.location_name)}</td>
+                <td style="font-weight:bold; color:var(--success)">${itemValue.toLocaleString()} ر.س</td>
+              </tr>
+            `;
+          });
+        });
+        tbody.innerHTML = html;
+      }
+    }
+  } catch(err) {
+    console.error(err);
+    showToast('فشل في تحليل بيانات الموردين', 'error');
+  }
 }
 
 function sortInventory(col) {
@@ -797,7 +1069,20 @@ function sortInventory(col) {
 }
 
 function renderInventoryTable() {
-  const filtered = state.inventory.filter(item => !state.category || item.location_type === state.category);
+  let filtered = state.inventory.filter(item => !state.category || item.location_type === state.category);
+  
+  if (state.category === 'Pharmacy') {
+    const filterPharmacyId = $('filterPharmacySelect')?.value;
+    const filterProductId = $('filterMedicineSelect')?.value;
+    
+    if (filterPharmacyId) {
+      filtered = filtered.filter(item => String(item.location_id) === String(filterPharmacyId));
+    }
+    if (filterProductId) {
+      filtered = filtered.filter(item => String(item.product_id) === String(filterProductId));
+    }
+  }
+  
   const inv = [...filtered];
   
   // Sorting logic
@@ -807,7 +1092,9 @@ function renderInventoryTable() {
     
     // Numeric sort for quantity
     if (state.sortCol === 'quantity') {
-      return state.sortAsc ? valA - valB : valB - valA;
+      let qA = valA === 'متوفر' ? Number.MAX_SAFE_INTEGER : Number(valA || 0);
+      let qB = valB === 'متوفر' ? Number.MAX_SAFE_INTEGER : Number(valB || 0);
+      return state.sortAsc ? qA - qB : qB - qA;
     }
     
     // String sort for others
@@ -829,9 +1116,10 @@ function renderInventoryTable() {
   }
 
   $('inventoryTableBody').innerHTML = inv.map(item => {
-    const daysToExpiry = Math.ceil((new Date(item.expiry_date) - new Date()) / (1000 * 60 * 60 * 24));
-    const isNearExpiry = daysToExpiry <= 120; // 4 months
-    const isLow = item.quantity <= item.reorder_point;
+    const isSupplier = item.location_type === 'Supplier';
+    const daysToExpiry = item.expiry_date ? Math.ceil((new Date(item.expiry_date) - new Date()) / (1000 * 60 * 60 * 24)) : 999;
+    const isNearExpiry = !isSupplier && item.expiry_date && daysToExpiry <= 120; // 4 months
+    const isLow = !isSupplier && item.quantity <= item.reorder_point;
 
     return `
       <tr>
@@ -840,12 +1128,12 @@ function renderInventoryTable() {
         <td><span class="badge badge--teal">${escapeHTML(item.cheapest_importer || 'لا يوجد مورد')}</span></td>
         <td style="font-weight:bold; color:var(--success)">${Number(item.unit_cost || 0).toLocaleString()} ر.س</td>
         <td>${escapeHTML(item.location_name)} <br>${locationBadge(item.location_type)}</td>
-        <td><span class="badge badge--purple">${item.batch_no}</span></td>
+        <td><span class="badge badge--purple">${item.batch_no || '—'}</span></td>
         <td style="color: ${isNearExpiry ? 'var(--danger)' : 'inherit'}; font-weight: ${isNearExpiry ? '700' : 'normal'}">
-          ${item.expiry_date}
+          ${isSupplier ? '—' : (item.expiry_date || '—')}
         </td>
         <td>
-          <span class="badge badge--${isLow ? 'red' : 'green'}" style="font-size:1rem; padding: 0.2rem 0.6rem;">
+          <span class="badge badge--${isSupplier ? 'green' : (isLow ? 'red' : 'green')}" style="font-size:1rem; padding: 0.2rem 0.6rem;">
             ${item.quantity}
           </span>
         </td>
@@ -925,12 +1213,31 @@ function renderLowStock(filterType = 'All') {
         <div class="row-item__name">${escapeHTML(i.product_name)}</div>
         <div class="row-item__meta"><span class="badge badge--${isWh ? 'blue' : 'amber'}">${isWh ? 'مستودع' : 'صيدلية'}</span> 📍 ${escapeHTML(i.location_name)} • التشغيلة: ${i.batch_no}</div>
       </div>
-      <div class="row-item__right" style="text-align: left;">
+      <div class="row-item__right" style="text-align: left; display: flex; gap: 0.5rem; align-items: center; justify-content: flex-end;">
         <span class="badge badge--red">${i.quantity} متوفر / ${i.reorder_point} الحد</span>
+        <button class="btn-refresh" style="font-size: 0.8rem; padding: 0.2rem 0.5rem; background: var(--surface-100); color: var(--text-muted); border: 1px solid var(--border-color);" onclick="ignoreLowStock(${i.location_id}, '${i.batch_no}')" title="تجاهل النقص">تجاهل ❌</button>
       </div>
     </div>
     `;
   }).join('');
+}
+
+async function ignoreLowStock(locationId, batchNo) {
+  if (!confirm('هل أنت متأكد من رغبتك في تجاهل تنبيه النقص لهذا الصنف؟\\nلن يظهر مرة أخرى حتى يتم تسجيل حركات جديدة عليه.')) return;
+  try {
+    const res = await api('/stock/ignore-low', {
+      method: 'PUT',
+      body: { location_id: locationId, batch_no: batchNo }
+    });
+    if (res.success) {
+      showToast('تم تجاهل التنبيه', 'success');
+      loadLowStock();
+    } else {
+      showToast(res.error || 'حدث خطأ أثناء تجاهل التنبيه', 'error');
+    }
+  } catch (err) {
+    showToast('خطأ في الاتصال بالخادم', 'error');
+  }
 }
 
 async function loadMovements() {
@@ -974,6 +1281,9 @@ async function loadMovements() {
   }).join('');
 }
 
+let pharmacyDashboardData = { lowStock: [], expiry: [], sales: [] };
+let pharmacySortOrder = { lowStock: {}, expiry: {}, sales: {} };
+
 async function loadPharmacyDashboard() {
   try {
     const data = await api('/reports/pharmacy-dashboard');
@@ -984,8 +1294,125 @@ async function loadPharmacyDashboard() {
     if (lowEl) lowEl.textContent = data.insufficientProductsCount;
     if (expEl) expEl.textContent = data.nearExpiryBatchesCount;
     if (salesEl) salesEl.textContent = data.totalMonthlySales + ' وحدة';
+
+    pharmacyDashboardData.lowStock = data.insufficientProducts || [];
+    pharmacyDashboardData.expiry = data.nearExpiryBatches || [];
+    pharmacyDashboardData.sales = data.topSellingProducts || [];
+
+    // Populate pharmacy location filter dropdown
+    const locSelect = $('pharmacySalesLocationFilter');
+    if (locSelect) {
+      locSelect.innerHTML = '<option value="">جميع الصيدليات</option>';
+      state.locations.filter(l => l.type === 'Pharmacy').forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l.location_id;
+        opt.textContent = l.name;
+        locSelect.appendChild(opt);
+      });
+    }
+
+    renderPharmacyTable('lowStock');
+    renderPharmacyTable('expiry');
+    renderPharmacyTable('sales');
+
   } catch (err) {
     console.error('Failed to load pharmacy dashboard stats', err);
+  }
+}
+
+async function loadPharmacySalesStats() {
+  try {
+    const range = $('pharmacySalesTimeRange')?.value || 'thisMonth';
+    const pharmacyId = $('pharmacySalesLocationFilter')?.value || '';
+    
+    const data = await api(`/reports/pharmacy-dashboard?range=${range}&pharmacy_id=${pharmacyId}`);
+    pharmacyDashboardData.sales = data.topSellingProducts || [];
+    renderPharmacyTable('sales');
+  } catch (err) {
+    console.error('Failed to load pharmacy sales stats', err);
+  }
+}
+
+function sortPharmacyTable(type, column) {
+  const currentOrder = pharmacySortOrder[type][column] === 'asc' ? 'desc' : 'asc';
+  pharmacySortOrder[type] = { [column]: currentOrder };
+
+  pharmacyDashboardData[type].sort((a, b) => {
+    let valA = a[column];
+    let valB = b[column];
+
+    if (valA == null) valA = '';
+    if (valB == null) valB = '';
+
+    if (typeof valA === 'string') valA = valA.toLowerCase();
+    if (typeof valB === 'string') valB = valB.toLowerCase();
+
+    if (valA < valB) return currentOrder === 'asc' ? -1 : 1;
+    if (valA > valB) return currentOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  renderPharmacyTable(type);
+  updatePharmacySortIcons(type, column, currentOrder);
+}
+
+function updatePharmacySortIcons(type, column, order) {
+  let idPrefix = '';
+  if (type === 'lowStock') idPrefix = 'low';
+  else if (type === 'expiry') idPrefix = 'exp';
+  else if (type === 'sales') idPrefix = 'sales';
+
+  document.querySelectorAll(`[id^="sort-icon-${idPrefix}-"]`).forEach(el => el.textContent = '');
+  const iconEl = $(`sort-icon-${idPrefix}-${column}`);
+  if (iconEl) iconEl.textContent = order === 'asc' ? '▲' : '▼';
+}
+
+function renderPharmacyTable(type) {
+  if (type === 'lowStock') {
+    const tbody = $('pharmacyLowStockBody');
+    if (!tbody) return;
+    if (pharmacyDashboardData.lowStock.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">لا توجد أدوية منخفضة المخزون</td></tr>';
+      return;
+    }
+    tbody.innerHTML = pharmacyDashboardData.lowStock.map(i => `
+      <tr>
+        <td style="font-weight: 700; color: var(--text-primary);">💊 ${escapeHTML(i.product_name)}</td>
+        <td style="color: var(--text-secondary);">${escapeHTML(i.location_name)}</td>
+        <td><span class="badge badge--red" style="font-size: 0.85rem; padding: 0.3rem 0.6rem;">${i.quantity} وحدة</span></td>
+        <td style="color: var(--text-muted); font-size: 0.9rem;">الحد: ${i.reorder_point}</td>
+      </tr>
+    `).join('');
+  } else if (type === 'expiry') {
+    const tbody = $('pharmacyExpiryBody');
+    if (!tbody) return;
+    if (pharmacyDashboardData.expiry.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">لا توجد تنبيهات صلاحية</td></tr>';
+      return;
+    }
+    tbody.innerHTML = pharmacyDashboardData.expiry.map(i => `
+      <tr>
+        <td style="font-weight: 700; color: var(--text-primary);">💊 ${escapeHTML(i.product_name)}</td>
+        <td style="font-family: monospace; color: var(--text-secondary); background: var(--bg-body); padding: 0.2rem 0.4rem; border-radius: 4px;">#${escapeHTML(i.batch_no)}</td>
+        <td style="color: var(--text-secondary);">${escapeHTML(i.expiry_date)}</td>
+        <td><span class="badge badge--amber" style="font-size: 0.85rem; padding: 0.3rem 0.6rem;">⏳ ${i.days_until_expiry} يوم</span></td>
+        <td style="color: var(--text-secondary);">${escapeHTML(i.location_name)}</td>
+      </tr>
+    `).join('');
+  } else if (type === 'sales') {
+    const tbody = $('pharmacySalesBody');
+    if (!tbody) return;
+    if (pharmacyDashboardData.sales.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" class="empty-state">لا يوجد مبيعات لهذا الشهر</td></tr>';
+      return;
+    }
+    tbody.innerHTML = pharmacyDashboardData.sales.map(i => `
+      <tr>
+        <td style="font-weight: 700; color: var(--text-primary);">⭐ ${escapeHTML(i.product_name)}</td>
+        <td style="font-family: monospace; color: var(--text-muted);">${escapeHTML(i.sku)}</td>
+        <td><span class="badge badge--green" style="font-size: 0.85rem; padding: 0.3rem 0.6rem;">📈 ${i.quantity_sold} مباع</span></td>
+      </tr>
+    `).join('');
   }
 }
 
@@ -1365,111 +1792,368 @@ function switchWarehouseTab(tabId) {
   $(`wh-tab-${tabId}`).style.display = 'block';
 }
 
-let importersRadarInstance = null;
-let importersLineInstance = null;
+let importersChartInstance = null;
+let lastImportersData = null;
+let currentImportersChartTab = 'scores';
 let allImportersProfiles = [];
+
+function switchImportersChart(tabId) {
+  currentImportersChartTab = tabId;
+  
+  // Update switcher tabs UI
+  document.querySelectorAll('.chart-switcher .chart-tab-btn').forEach(btn => btn.classList.remove('active'));
+  const activeBtn = document.getElementById(`btnImpChart${tabId.charAt(0).toUpperCase() + tabId.slice(1)}`);
+  if (activeBtn) activeBtn.classList.add('active');
+  
+  // Update card title
+  const titleEl = document.getElementById('importersChartTitle');
+  if (titleEl) {
+    if (tabId === 'scores') titleEl.textContent = '📊 مؤشرات الأداء والاعتمادية للموردين';
+    else if (tabId === 'volume') titleEl.textContent = '📊 مقارنة الإنفاق المالي وحجم التوريد';
+    else if (tabId === 'exclusivity') titleEl.textContent = '⚠️ تحليل تنافسية الأسعار والاحترافية الاحتكارية';
+  }
+  
+  // Render selected chart
+  renderImportersChart();
+}
+
+function renderImportersChart() {
+  if (!lastImportersData || !document.getElementById('importersAnalyticsChart')) return;
+  
+  if (importersChartInstance) {
+    importersChartInstance.destroy();
+    importersChartInstance = null;
+  }
+  
+  const ctx = document.getElementById('importersAnalyticsChart').getContext('2d');
+  const top5 = lastImportersData.leaderboard;
+  const labels = top5.map(i => i.name);
+  
+  let config = {};
+  
+  if (currentImportersChartTab === 'scores') {
+    config = {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'تنافسية الأسعار (%)',
+            data: top5.map(i => i.price_score),
+            backgroundColor: 'rgba(13, 148, 136, 0.8)',
+            borderColor: '#0d9488',
+            borderWidth: 1.5,
+            borderRadius: 6,
+            barThickness: 20
+          },
+          {
+            label: 'اعتمادية التوريد (%)',
+            data: top5.map(i => i.volume_score),
+            backgroundColor: 'rgba(37, 99, 235, 0.8)',
+            borderColor: '#2563eb',
+            borderWidth: 1.5,
+            borderRadius: 6,
+            barThickness: 20
+          },
+          {
+            label: 'تنوع المنتجات (%)',
+            data: top5.map(i => i.diversity_score),
+            backgroundColor: 'rgba(124, 58, 237, 0.8)',
+            borderColor: '#7c3aed',
+            borderWidth: 1.5,
+            borderRadius: 6,
+            barThickness: 20
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            rtl: true,
+            textDirection: 'rtl',
+            labels: { font: { family: 'Tajawal', size: 12, weight: '600' }, color: '#475569' }
+          },
+          tooltip: {
+            rtl: true,
+            textDirection: 'rtl',
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleFont: { family: 'Tajawal', size: 14, weight: 'bold' },
+            bodyFont: { family: 'Tajawal', size: 13 },
+            callbacks: {
+              label: function(context) {
+                return ` ${context.dataset.label}: ${context.parsed.y}%`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { family: 'Tajawal', size: 12, weight: '600' }, color: '#475569' }
+          },
+          y: {
+            min: 0,
+            max: 100,
+            ticks: {
+              font: { family: 'Tajawal', size: 11 },
+              color: '#94a3b8',
+              callback: function(value) { return value + '%'; }
+            },
+            grid: { color: 'rgba(226, 232, 240, 0.6)' }
+          }
+        }
+      }
+    };
+  } else if (currentImportersChartTab === 'volume') {
+    config = {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'الكمية الموردة (وحدة)',
+            data: top5.map(i => i.total_volume),
+            backgroundColor: 'rgba(124, 58, 237, 0.8)',
+            borderColor: '#7c3aed',
+            borderWidth: 1.5,
+            borderRadius: 6,
+            barThickness: 22,
+            yAxisID: 'y'
+          },
+          {
+            label: 'إجمالي الإنفاق (ر.س)',
+            data: top5.map(i => i.total_spent),
+            backgroundColor: 'rgba(217, 119, 6, 0.8)',
+            borderColor: '#d97706',
+            borderWidth: 1.5,
+            borderRadius: 6,
+            barThickness: 22,
+            yAxisID: 'y1'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            rtl: true,
+            textDirection: 'rtl',
+            labels: { font: { family: 'Tajawal', size: 12, weight: '600' }, color: '#475569' }
+          },
+          tooltip: {
+            rtl: true,
+            textDirection: 'rtl',
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleFont: { family: 'Tajawal', size: 14, weight: 'bold' },
+            bodyFont: { family: 'Tajawal', size: 13 },
+            callbacks: {
+              label: function(context) {
+                const val = context.parsed.y;
+                if (context.dataset.yAxisID === 'y') {
+                  return ` الكمية الموردة: ${Number(val).toLocaleString()} وحدة`;
+                } else {
+                  return ` إجمالي الإنفاق: ${Number(val).toLocaleString()} ر.س`;
+                }
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { family: 'Tajawal', size: 12, weight: '600' }, color: '#475569' }
+          },
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            title: {
+              display: true,
+              text: 'الكمية الموردة (وحدة)',
+              font: { family: 'Tajawal', size: 12, weight: 'bold' },
+              color: '#475569'
+            },
+            ticks: {
+              font: { family: 'Tajawal', size: 11 },
+              color: '#94a3b8'
+            },
+            grid: { color: 'rgba(226, 232, 240, 0.6)' }
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            title: {
+              display: true,
+              text: 'إجمالي الإنفاق (ر.س)',
+              font: { family: 'Tajawal', size: 12, weight: 'bold' },
+              color: '#475569'
+            },
+            ticks: {
+              font: { family: 'Tajawal', size: 11 },
+              color: '#94a3b8'
+            },
+            grid: { drawOnChartArea: false }
+          }
+        }
+      }
+    };
+  } else if (currentImportersChartTab === 'exclusivity') {
+    config = {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'أصناف بأقل سعر في السوق',
+            data: top5.map(i => i.cheap_mutual_products_count || 0),
+            backgroundColor: 'rgba(22, 163, 74, 0.8)',
+            borderColor: '#16a34a',
+            borderWidth: 1.5,
+            borderRadius: 6,
+            barThickness: 22
+          },
+          {
+            label: 'أصناف حصرية للمورد ⚠️',
+            data: top5.map(i => i.exclusive_medicines || 0),
+            backgroundColor: 'rgba(220, 38, 38, 0.8)',
+            borderColor: '#dc2626',
+            borderWidth: 1.5,
+            borderRadius: 6,
+            barThickness: 22
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            rtl: true,
+            textDirection: 'rtl',
+            labels: { font: { family: 'Tajawal', size: 12, weight: '600' }, color: '#475569' }
+          },
+          tooltip: {
+            rtl: true,
+            textDirection: 'rtl',
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleFont: { family: 'Tajawal', size: 14, weight: 'bold' },
+            bodyFont: { family: 'Tajawal', size: 13 },
+            callbacks: {
+              label: function(context) {
+                return ` ${context.dataset.label}: ${context.parsed.y} صنف`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { family: 'Tajawal', size: 12, weight: '600' }, color: '#475569' }
+          },
+          y: {
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1,
+              font: { family: 'Tajawal', size: 11 },
+              color: '#94a3b8'
+            },
+            grid: { color: 'rgba(226, 232, 240, 0.6)' }
+          }
+        }
+      }
+    };
+  }
+  
+  importersChartInstance = new Chart(ctx, config);
+}
 
 async function loadAnalyticsImportersProfile() {
   try {
     const data = await api('/analytics/importers');
+    lastImportersData = data;
+
+    // Render Importers Summary KPIs
+    const kpiContainer = $('importersSummaryKPIs');
+    if (kpiContainer) {
+      const totalSpent = data.all_profiles.reduce((sum, p) => sum + (p.total_spent || 0), 0);
+      const totalVolume = data.all_profiles.reduce((sum, p) => sum + (p.total_volume || 0), 0);
+      const totalExclusive = data.all_profiles.reduce((sum, p) => sum + (p.exclusive_medicines || 0), 0);
+      
+      kpiContainer.innerHTML = `
+        <div class="stat-card fade-in">
+          <div class="stat-card__icon stat-card__icon--blue">🏢</div>
+          <div>
+            <div class="stat-card__value">${data.all_profiles.length}</div>
+            <div class="stat-card__label">الموردين النشطين</div>
+          </div>
+        </div>
+        <div class="stat-card fade-in">
+          <div class="stat-card__icon stat-card__icon--amber">💰</div>
+          <div>
+            <div class="stat-card__value" style="font-size: 1.3rem; white-space: nowrap;">${Number(totalSpent).toLocaleString()} ر.س</div>
+            <div class="stat-card__label">إجمالي المشتريات</div>
+          </div>
+        </div>
+        <div class="stat-card fade-in">
+          <div class="stat-card__icon stat-card__icon--purple">📦</div>
+          <div>
+            <div class="stat-card__value">${Number(totalVolume).toLocaleString()}</div>
+            <div class="stat-card__label">إجمالي التوريدات (وحدة)</div>
+          </div>
+        </div>
+        <div class="stat-card fade-in">
+          <div class="stat-card__icon stat-card__icon--red">⚠️</div>
+          <div>
+            <div class="stat-card__value">${totalExclusive}</div>
+            <div class="stat-card__label">أصناف تحت الاحتكار</div>
+          </div>
+        </div>
+      `;
+    }
 
     // Section A: Leaderboard
     const lbBody = $('impProfileLeaderboardBody');
     if (data.leaderboard.length === 0) {
-      lbBody.innerHTML = '<tr><td colspan="4" class="empty-state">لا يوجد موردين لتقييمهم</td></tr>';
+      lbBody.innerHTML = '<tr><td colspan="5" class="empty-state">لا يوجد موردين لتقييمهم</td></tr>';
     } else {
-      lbBody.innerHTML = data.leaderboard.map((imp, idx) => `
+      lbBody.innerHTML = data.leaderboard.map((imp, idx) => {
+        const stars = '⭐'.repeat(imp.stars) + '☆'.repeat(5 - imp.stars);
+        return `
         <tr>
           <td style="font-weight:bold; color:var(--primary); font-size: 1.1rem;">#${idx + 1}</td>
           <td>${escapeHTML(imp.name)}</td>
-          <td><span class="badge badge--success">${imp.rank_score} / 100</span></td>
-          <td>${imp.avg_accuracy}%</td>
+          <td style="color: #f59e0b; font-size: 1.1rem; letter-spacing: 2px;">${stars}</td>
+          <td><span class="badge badge--success">${imp.cheap_mutual_products_count || 0} صنف</span></td>
+          <td>${Number(imp.total_orders).toLocaleString()}</td>
         </tr>
-      `).join('');
+      `}).join('');
     }
 
-    // Render Radar Chart
-    if ($('importersRadarChart')) {
-      if (importersRadarInstance) importersRadarInstance.destroy();
-      const ctx = $('importersRadarChart').getContext('2d');
-      const labels = data.leaderboard.map(i => i.name);
-      const dataAccuracy = data.leaderboard.map(i => i.avg_accuracy);
-      const dataDelivery = data.leaderboard.map(i => i.delivery_score);
-      const dataPrice = data.leaderboard.map(i => i.price_score);
-      
-      importersRadarInstance = new Chart(ctx, {
-        type: 'radar',
-        data: {
-          labels: labels,
-          datasets: [
-            { label: 'دقة الطلبات', data: dataAccuracy, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)' },
-            { label: 'سرعة التوصيل', data: dataDelivery, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.2)' },
-            { label: 'تنافسية السعر', data: dataPrice, borderColor: '#8b5cf6', backgroundColor: 'rgba(139, 92, 246, 0.2)' }
-          ]
-        },
-        options: {
-          scales: { r: { min: 0, max: 100 } },
-          plugins: { legend: { position: 'bottom' } }
+    // Render Importers Analytics Chart (default to 'scores' tab)
+    switchImportersChart('scores');
+
+    // Section B: Mutual Medicines Comparison
+    window.currentComparisonData = data.comparisonData || {};
+    const compareSelect = $('importersPriceMedicineSelect');
+    if (compareSelect) {
+        const meds = Object.keys(window.currentComparisonData);
+        if (meds.length > 0) {
+            compareSelect.innerHTML = meds.map(m => `<option value="${escapeHTML(m)}">${escapeHTML(m)}</option>`).join('');
+            window.updateImportersComparison();
+        } else {
+            compareSelect.innerHTML = '<option value="">لا توجد أدوية مشتركة للمقارنة</option>';
+            $('importersComparisonContainer').innerHTML = '<div class="empty-state" style="width:100%;">لا توجد بيانات متاحة</div>';
         }
-      });
-    }
-
-    // Section B: Pricing Trends & Best Deals
-    if ($('importersLineChart')) {
-      if (importersLineInstance) importersLineInstance.destroy();
-      const ctx = $('importersLineChart').getContext('2d');
-      
-      const datasets = [];
-      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-      let cIdx = 0;
-      
-      let allDates = new Set();
-      
-      for (const [productName, history] of Object.entries(data.pricingTrends)) {
-        history.forEach(h => allDates.add(h.date_val));
-      }
-      const sortedDates = Array.from(allDates).sort();
-
-      for (const [productName, history] of Object.entries(data.pricingTrends)) {
-        // Map history to the sorted dates, filling missing with null
-        const dataPoints = sortedDates.map(date => {
-          const match = history.find(h => h.date_val === date);
-          return match ? match.price : null;
-        });
-
-        datasets.push({
-          label: productName,
-          data: dataPoints,
-          borderColor: colors[cIdx % colors.length],
-          tension: 0.1,
-          spanGaps: true
-        });
-        cIdx++;
-      }
-
-      importersLineInstance = new Chart(ctx, {
-        type: 'line',
-        data: { labels: sortedDates, datasets: datasets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { position: 'top' } },
-          scales: { y: { beginAtZero: false } }
-        }
-      });
-    }
-
-    const dealsBody = $('impProfileBestDealsBody');
-    if (data.bestDeals.length === 0) {
-      dealsBody.innerHTML = '<tr><td colspan="3" class="empty-state">لا توجد عروض حالية أقل من المتوسط</td></tr>';
-    } else {
-      dealsBody.innerHTML = data.bestDeals.map(d => `
-        <tr>
-          <td>${escapeHTML(d.product_name)}</td>
-          <td><span class="badge badge--purple">${escapeHTML(d.supplier_name)}</span></td>
-          <td style="font-weight:bold; color:var(--success)">${d.price} ر.س</td>
-        </tr>
-      `).join('');
     }
 
     // Section C: Profiles
@@ -1496,10 +2180,10 @@ function renderImpProfiles() {
   }
   
   tbody.innerHTML = filtered.map(i => `
-    <tr>
+    <tr style="cursor:pointer;" onclick="loadAnalyticsImporterDetailedProfile(${i.location_id})">
       <td style="font-weight:bold;">${escapeHTML(i.name)}</td>
       <td>${i.total_products} منتج</td>
-      <td>${i.total_orders} طلبية</td>
+      <td>${Number(i.total_orders).toLocaleString()} قطعة</td>
       <td style="color:var(--primary); font-weight:bold;">${Number(i.total_spent).toLocaleString()} ر.س</td>
       <td>
         ${i.medicine_names ? i.medicine_names.split(',').map(m => `<span class="badge badge--gray" style="margin:2px; font-size:0.75rem;">${escapeHTML(m.trim())}</span>`).join('') : '<span class="text-muted">لا يوجد</span>'}
@@ -1521,6 +2205,60 @@ function switchImportersTab(tabId) {
   
   document.querySelectorAll('#analytics-view-importers-profile .profile-tab-content').forEach(c => c.style.display = 'none');
   $(`imp-tab-${tabId}`).style.display = 'block';
+}
+
+async function loadAnalyticsImporterDetailedProfile(id) {
+  try {
+    const data = await api(`/analytics/importers/${id}`);
+    
+    // Set basic info
+    $('profileImporterName').textContent = data.profile.name;
+    $('profileImporterAddress').textContent = data.profile.address || 'غير محدد';
+    $('profileImporterStatus').textContent = data.profile.is_active ? 'نشط' : 'غير نشط';
+    
+    // Render Offers
+    const offersBody = $('profileImporterOffersBody');
+    if (data.offers.length === 0) {
+      offersBody.innerHTML = '<tr><td colspan="4" class="empty-state">لا يوجد عروض حالية</td></tr>';
+    } else {
+      offersBody.innerHTML = data.offers.map(o => `
+        <tr>
+          <td>${escapeHTML(o.product_name)}</td>
+          <td>${escapeHTML(o.sku)}</td>
+          <td style="font-weight:bold; color:var(--success)">${o.price} ر.س</td>
+          <td>${escapeHTML(o.condition || 'جديد')}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Render Orders
+    const ordersBody = $('profileImporterOrdersBody');
+    if (data.orders.length === 0) {
+      ordersBody.innerHTML = '<tr><td colspan="5" class="empty-state">لا يوجد سجل استلامات سابقة</td></tr>';
+    } else {
+      ordersBody.innerHTML = data.orders.map(o => `
+        <tr>
+          <td>${new Date(o.created_at).toLocaleDateString('ar-SA')}</td>
+          <td>${escapeHTML(o.destination_name || '')}</td>
+          <td>${escapeHTML(o.product_name || '')}</td>
+          <td style="font-weight:bold;">${Number(o.quantity).toLocaleString()}</td>
+          <td style="font-weight:bold; color:var(--primary);">${Number(o.total_cost || 0).toLocaleString()} ر.س</td>
+        </tr>
+      `).join('');
+    }
+
+    analyticsNavigate('importer-detailed-profile');
+    switchImporterProfileTab('offers');
+  } catch (err) {
+    showToast('فشل تحميل بيانات المورد', 'error');
+  }
+}
+
+function switchImporterProfileTab(tabId) {
+  document.querySelectorAll('#analytics-view-importer-detailed-profile .category-btn').forEach(b => b.classList.remove('active'));
+  $(`impProfileTab${tabId.charAt(0).toUpperCase() + tabId.slice(1)}Btn`).classList.add('active');
+  document.querySelectorAll('#analytics-view-importer-detailed-profile .profile-tab-content').forEach(c => c.style.display = 'none');
+  $(`imp-profile-tab-${tabId}`).style.display = 'block';
 }
 
 // ─── Medicines Analytics Logic ──────────────────────────────────────
@@ -1831,6 +2569,56 @@ function switchMedicinesTab(tabId) {
   document.querySelectorAll('#analytics-view-medicines-profile .profile-tab-content').forEach(c => c.style.display = 'none');
   $(`meds-tab-${tabId}`).style.display = 'block';
 }
+
+window.updateImportersComparison = function() {
+    const select = $('importersPriceMedicineSelect');
+    if (!select) return;
+    const productName = select.value;
+    if (!productName || !window.currentComparisonData[productName]) return;
+
+    const suppliersData = window.currentComparisonData[productName];
+    const container = $('importersComparisonContainer');
+    
+    if (suppliersData.length === 0) {
+        container.innerHTML = '<div class="empty-state" style="width:100%;">لا توجد بيانات مقارنة لهذا الدواء.</div>';
+        return;
+    }
+
+    // Find min price to highlight the cheapest
+    const minPrice = Math.min(...suppliersData.map(s => s.price));
+
+    container.innerHTML = suppliersData.map(s => {
+        const isCheapest = s.price === minPrice;
+        const badge = isCheapest ? '<div style="position: absolute; top: 12px; left: 12px;"><span class="badge badge--success" style="font-size:0.85rem; padding: 0.35rem 0.6rem; box-shadow: 0 4px 8px rgba(16,185,129,0.3);">🏆 الأرخص</span></div>' : '';
+        const borderStyle = isCheapest ? 'border: 2px solid var(--success); box-shadow: 0 8px 16px rgba(16, 185, 129, 0.15); transform: translateY(-2px);' : 'border: 1px solid var(--border);';
+        
+        return `
+            <div class="fade-in" style="position: relative; padding: 1.5rem; border-radius: 12px; background: var(--surface); transition: all 0.2s ease; ${borderStyle}">
+                ${badge}
+                <div style="font-size: 1.15rem; font-weight: bold; margin-bottom: 1.5rem; color: var(--text); border-bottom: 1px dashed var(--border); padding-bottom: 0.8rem; padding-left: 5rem; line-height: 1.4;">
+                    ${escapeHTML(s.supplier_name)}
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: var(--text-muted); font-size: 0.95rem;">السعر الحالي:</span>
+                        <span style="font-size: 1.3rem; font-weight: bold; color: ${isCheapest ? 'var(--success)' : 'var(--text)'};">${s.price} ر.س</span>
+                    </div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: var(--text-muted); font-size: 0.95rem;">حالة العرض:</span>
+                        <span style="font-size: 1rem; font-weight: 600; background: var(--bg); padding: 0.25rem 0.6rem; border-radius: 4px;">${escapeHTML(s.condition || 'جديد')}</span>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.8rem; border-top: 1px solid var(--border);">
+                        <span style="color: var(--text-muted); font-size: 0.95rem;">الكمية الموردة سابقاً:</span>
+                        <span style="font-size: 1.15rem; font-weight: bold; color: var(--primary);">${Number(s.historical_volume).toLocaleString()} وحدة</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+};
 
 // ─── Medicine Detail Profile ────────────────────────────────────────
 async function loadMedicineDetail(productId) {

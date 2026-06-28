@@ -70,7 +70,7 @@
         <nav class="category-switcher" style="justify-content: center;">
           <button class="category-btn active" data-category="Pharmacy" onclick="switchCategory('Pharmacy')" style="flex: 0 1 300px;">الصيدليات</button>
           <button class="category-btn" data-category="Warehouse" onclick="switchCategory('Warehouse')" style="flex: 0 1 300px;">المستودع المركزي</button>
-          <button class="category-btn" data-category="Exporter" onclick="switchCategory('Exporter')" style="flex: 0 1 300px;">الموردون</button>
+          <button class="category-btn" data-category="Supplier" onclick="switchCategory('Supplier')" style="flex: 0 1 300px;">الموردون</button>
         </nav>
 
         <!-- PHARMACY DASHBOARD PLACEHOLDER -->
@@ -109,6 +109,8 @@
               </div>
             </div>
           </div>
+
+
         </div>
 
         <!-- WAREHOUSE DASHBOARD -->
@@ -144,13 +146,80 @@
         </div>
 
         <!-- SUPPLIER DASHBOARD -->
+        <!-- SUPPLIER DASHBOARD -->
+        <div id="supplier-dashboard" class="supplier-only" style="display: none; margin-bottom: 2rem;">
+          
+          <div class="pharmacy-dashboard-card" style="border-right-color: var(--amber); margin-bottom: 1.5rem;">
+            <h3 class="pharmacy-dashboard-title">تحليل المخزون حسب الموردين</h3>
+            <div class="pharmacy-dashboard-grid">
+              <div class="pharmacy-metric-card">
+                <span class="pharmacy-metric-icon">🏢</span>
+                <div class="pharmacy-metric-details">
+                  <span class="pharmacy-metric-value" id="invSupplierCount">—</span>
+                  <span class="pharmacy-metric-label">الموردين في المخزون الحالي</span>
+                </div>
+              </div>
+              <div class="pharmacy-metric-card">
+                <span class="pharmacy-metric-icon">💰</span>
+                <div class="pharmacy-metric-details">
+                  <span class="pharmacy-metric-value" id="invSupplierTotalValue">—</span>
+                  <span class="pharmacy-metric-label">قيمة المخزون الإجمالية</span>
+                </div>
+              </div>
+              <div class="pharmacy-metric-card">
+                <span class="pharmacy-metric-icon">🏆</span>
+                <div class="pharmacy-metric-details">
+                  <span class="pharmacy-metric-value" id="invSupplierTop">—</span>
+                  <span class="pharmacy-metric-label">المورد الأكبر مساهمة</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div class="panel">
+            <div class="panel__header">
+              <div class="panel__title">قائمة الأدوية المتوفرة (مجمعة حسب المورد)</div>
+            </div>
+            <div class="panel__body" style="height: calc(100vh - 350px); overflow-y: auto; padding: 0;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>المورد (Importer)</th>
+                    <th>اسم الدواء</th>
+                    <th>الكمية المتوفرة</th>
+                    <th>موقع التخزين</th>
+                    <th>قيمة المخزون</th>
+                  </tr>
+                </thead>
+                <tbody id="inventorySupplierTableBody">
+                  <tr><td colspan="5" class="empty-state">جاري تحليل المخزون...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="main-inventory-container">          <div class="panel">
             <div class="panel__header">
               <div class="panel__title">جدول المخزون الحالي</div>
               <button class="btn-refresh" onclick="loadAll()" title="تحديث">
                 <span class="btn-refresh__icon">↻</span> تحديث
               </button>
+            </div>
+            <!-- Pharmacy Inventory Filters -->
+            <div id="pharmacyInventoryFilters" class="pharmacy-only" style="display: none; padding: 1rem 1.5rem; background: var(--surface); border-bottom: 1px solid var(--border); gap: 1.5rem; align-items: center; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 250px; flex: 1;">
+                <label for="filterPharmacySelect" style="font-weight: bold; font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap; margin-bottom: 0;">🏥 الصيدلية:</label>
+                <select id="filterPharmacySelect" onchange="renderInventoryTable()" class="form-group" style="margin-bottom: 0; padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); flex: 1;">
+                  <option value="">جميع الصيدليات</option>
+                </select>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.5rem; min-width: 250px; flex: 1;">
+                <label for="filterMedicineSelect" style="font-weight: bold; font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap; margin-bottom: 0;">💊 الدواء:</label>
+                <select id="filterMedicineSelect" onchange="renderInventoryTable()" class="form-group" style="margin-bottom: 0; padding: 0.4rem; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); flex: 1;">
+                  <option value="">جميع الأدوية</option>
+                </select>
+              </div>
             </div>
             <div class="panel__body" style="height: calc(100vh - 200px); overflow-y: auto;">
               <table class="data-table">
@@ -195,6 +264,87 @@
             </div>
           </div>
         </div>
+
+        <div id="pharmacy-detailed-stats" class="pharmacy-only" style="margin-top: 2rem;">
+          <div class="panels">
+            <!-- Low Stock Table -->
+            <div class="panel fade-in">
+              <div class="panel__header">
+                <div class="panel__title">🔻 تفاصيل الأدوية منخفضة المخزون</div>
+              </div>
+              <div class="panel__body" style="padding: 0; max-height: 300px; overflow-y: auto;">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th class="sortable" onclick="sortPharmacyTable('lowStock', 'product_name')">الدواء <span class="sort-icon" id="sort-icon-low-product_name"></span></th>
+                      <th class="sortable" onclick="sortPharmacyTable('lowStock', 'location_name')">الصيدلية <span class="sort-icon" id="sort-icon-low-location_name"></span></th>
+                      <th class="sortable" onclick="sortPharmacyTable('lowStock', 'quantity')">الكمية <span class="sort-icon" id="sort-icon-low-quantity"></span></th>
+                      <th class="sortable" onclick="sortPharmacyTable('lowStock', 'reorder_point')">حد الطلب <span class="sort-icon" id="sort-icon-low-reorder_point"></span></th>
+                    </tr>
+                  </thead>
+                  <tbody id="pharmacyLowStockBody">
+                    <tr><td colspan="4" class="empty-state">لا يوجد بيانات</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Near Expiry Table -->
+            <div class="panel fade-in">
+              <div class="panel__header">
+                <div class="panel__title">⏰ تفاصيل تنبيهات انتهاء الصلاحية</div>
+              </div>
+              <div class="panel__body" style="padding: 0; max-height: 300px; overflow-y: auto;">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th class="sortable" onclick="sortPharmacyTable('expiry', 'product_name')">الدواء <span class="sort-icon" id="sort-icon-exp-product_name"></span></th>
+                      <th class="sortable" onclick="sortPharmacyTable('expiry', 'batch_no')">التشغيلة <span class="sort-icon" id="sort-icon-exp-batch_no"></span></th>
+                      <th class="sortable" onclick="sortPharmacyTable('expiry', 'expiry_date')">تاريخ الانتهاء <span class="sort-icon" id="sort-icon-exp-expiry_date"></span></th>
+                      <th class="sortable" onclick="sortPharmacyTable('expiry', 'days_until_expiry')">الأيام <span class="sort-icon" id="sort-icon-exp-days_until_expiry"></span></th>
+                      <th class="sortable" onclick="sortPharmacyTable('expiry', 'location_name')">الصيدلية <span class="sort-icon" id="sort-icon-exp-location_name"></span></th>
+                    </tr>
+                  </thead>
+                  <tbody id="pharmacyExpiryBody">
+                    <tr><td colspan="5" class="empty-state">لا يوجد بيانات</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Top Selling Table -->
+            <div class="panel fade-in" style="grid-column: 1 / -1;">
+              <div class="panel__header" style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;">
+                <div class="panel__title">🏆 الأدوية الأعلى مبيعاً</div>
+                <div style="display: flex; gap: 0.5rem; flex: 1; justify-content: flex-end;">
+                  <select id="pharmacySalesTimeRange" onchange="loadPharmacySalesStats()" class="form-group" style="margin-bottom:0; padding:0.4rem; border-radius:4px; border:1px solid #ccc;">
+                    <option value="thisMonth">هذا الشهر</option>
+                    <option value="lastMonth">الشهر الماضي</option>
+                    <option value="lastWeek">آخر أسبوع</option>
+                  </select>
+                  <select id="pharmacySalesLocationFilter" onchange="loadPharmacySalesStats()" class="form-group" style="margin-bottom:0; padding:0.4rem; border-radius:4px; border:1px solid #ccc;">
+                    <option value="">جميع الصيدليات</option>
+                  </select>
+                </div>
+              </div>
+              <div class="panel__body" style="padding: 0; max-height: 300px; overflow-y: auto;">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th class="sortable" onclick="sortPharmacyTable('sales', 'product_name')">الدواء <span class="sort-icon" id="sort-icon-sales-product_name"></span></th>
+                      <th class="sortable" onclick="sortPharmacyTable('sales', 'sku')">الرمز <span class="sort-icon" id="sort-icon-sales-sku"></span></th>
+                      <th class="sortable" onclick="sortPharmacyTable('sales', 'quantity_sold')">الكمية المباعة <span class="sort-icon" id="sort-icon-sales-quantity_sold"></span></th>
+                    </tr>
+                  </thead>
+                  <tbody id="pharmacySalesBody">
+                    <tr><td colspan="3" class="empty-state">لا يوجد بيانات</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
         <!-- ═══ TAB: ANALYTICS ═══ -->
         <div id="tab-analytics" class="tab-content">
@@ -391,41 +541,75 @@
 
             <!-- SECTION A: LEADERBOARD -->
             <div id="imp-tab-leaderboard" class="profile-tab-content active">
-              <div class="panels" style="grid-template-columns: 1fr 1fr; gap: 1rem;">
+              
+              <div style="background: rgba(13, 148, 136, 0.05); border: 1px solid var(--primary); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem; display: flex; align-items: start; gap: 0.75rem;">
+                <span style="font-size: 1.5rem;">💡</span>
+                <div>
+                  <h4 style="margin: 0 0 0.5rem 0; color: var(--primary); font-family: 'Tajawal', sans-serif;">كيف تعمل هذه الأرقام؟ (شفافية التقييم)</h4>
+                  <p style="margin: 0; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.6; font-family: 'Tajawal', sans-serif;">
+                    جميع التقييمات في هذه الشاشة <strong>ليست أرقاماً عشوائية</strong>، بل تُحسب <strong>تلقائياً</strong> من بياناتك الفعلية:<br>
+                    • <strong>التقييم العام (النجوم):</strong> يُحسب بمتوسط مرجح دقيق (40% للمورد الأرخص سعراً، 40% لحجم الاستلامات الفعلية، 20% لتنوع الأدوية).<br>
+                    • <strong>التنافسية (الأرخص):</strong> يفحص النظام جميع الأدوية المشتركة، ويحسب نسبة الأدوية التي يوفرها هذا المورد بأرخص سعر في السوق.<br>
+                    • <strong>الاعتمادية (التوريد الفعلي):</strong> يقرأ النظام من أرشيف حركات المخزون والفواتير الفعلية لحساب كمية ما تم اعتماده حقاً من هذا المورد.
+                  </p>
+                </div>
+              </div>
+              
+              <!-- Summary KPI Row -->
+              <section class="stats" id="importersSummaryKPIs" style="grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+                <!-- Rendered dynamically by JS -->
+              </section>
+
+              <div class="panels" style="grid-template-columns: 1fr; gap: 1.5rem;">
                 <div class="panel fade-in">
                   <div class="panel__header"><div class="panel__title">🏆 قائمة أفضل الموردين (Leaderboard)</div></div>
                   <div class="panel__body" style="padding: 0;">
                     <table class="data-table">
-                      <thead><tr><th>الترتيب</th><th>اسم المورد</th><th>النقاط الكلية</th><th>دقة الطلبات</th></tr></thead>
+                      <thead>
+                        <tr>
+                          <th>الترتيب</th>
+                          <th>اسم المورد</th>
+                          <th title="يُحسب بناءً على: 40% أرخص سعر، 40% حجم توريد، 20% تنوع منتجات." style="cursor: help;">التقييم العام ℹ️</th>
+                          <th title="نسبة الأدوية التي يبيعها هذا المورد بأرخص سعر مقارنة بجميع الموردين الآخرين لنفس الدواء." style="cursor: help;">الأرخص في (صنف) ℹ️</th>
+                          <th title="إجمالي الكميات الفعلية التي تم استلامها وإدخالها للمخزون من هذا المورد تاريخياً (حركات فعلية)." style="cursor: help;">الاعتمادية (وحدة) ℹ️</th>
+                        </tr>
+                      </thead>
                       <tbody id="impProfileLeaderboardBody"></tbody>
                     </table>
                   </div>
                 </div>
-                <div class="panel fade-in" style="display: flex; flex-direction: column; align-items: center;">
-                  <div class="panel__header" style="width: 100%;"><div class="panel__title">📈 مقارنة الأداء (Top 5)</div></div>
-                  <div class="panel__body" style="width: 100%; max-width: 400px; padding: 1rem;">
-                    <canvas id="importersRadarChart"></canvas>
+                <div class="panel fade-in" style="display: flex; flex-direction: column;">
+                  <div class="panel__header" style="width: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                    <div class="panel__title" id="importersChartTitle">📊 مؤشرات الأداء والاعتمادية للموردين</div>
+                    <div class="chart-switcher">
+                      <button class="chart-tab-btn active" id="btnImpChartScores" onclick="switchImportersChart('scores')">مؤشرات الأداء</button>
+                      <button class="chart-tab-btn" id="btnImpChartVolume" onclick="switchImportersChart('volume')">الإنفاق والتوريد</button>
+                      <button class="chart-tab-btn" id="btnImpChartExclusivity" onclick="switchImportersChart('exclusivity')">التنافسية والحصرية</button>
+                    </div>
+                  </div>
+                  <div class="panel__body" style="width: 100%; height: 400px; padding: 1rem;">
+                    <div style="position: relative; width: 100%; height: 100%;">
+                      <canvas id="importersAnalyticsChart"></canvas>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- SECTION B: PRICING -->
+            <!-- SECTION B: PRICING (COMPARISON) -->
             <div id="imp-tab-pricing" class="profile-tab-content" style="display: none;">
-              <div class="panels" style="grid-template-columns: 2fr 1fr; gap: 1rem;">
-                <div class="panel fade-in">
-                  <div class="panel__header"><div class="panel__title">📉 اتجاهات الأسعار (Pricing Trends)</div></div>
-                  <div class="panel__body" style="padding: 1rem; position: relative; height: 350px;">
-                    <canvas id="importersLineChart"></canvas>
-                  </div>
+              <div class="panel fade-in" style="width: 100%;">
+                <div class="panel__header">
+                   <div class="panel__title">⚖️ مقارنة الموردين (الأدوية المشتركة)</div>
                 </div>
-                <div class="panel fade-in">
-                  <div class="panel__header"><div class="panel__title">🔥 أفضل العروض الحالية</div></div>
-                  <div class="panel__body" style="max-height: 350px; overflow-y: auto; padding: 0;">
-                    <table class="data-table">
-                      <thead><tr><th>الدواء</th><th>المورد</th><th>السعر</th></tr></thead>
-                      <tbody id="impProfileBestDealsBody"></tbody>
-                    </table>
+                <div class="panel__body" style="padding: 1.5rem; display: flex; flex-direction: column;">
+                  <label for="importersPriceMedicineSelect" style="font-weight: bold; margin-bottom: 0.5rem; display: block;">اختر الدواء للمقارنة:</label>
+                  <select id="importersPriceMedicineSelect" onchange="updateImportersComparison()" class="form-group" style="margin-bottom: 2rem; width: 100%; padding: 0.75rem; border-radius: 8px; font-size: 1.1rem; background-color: var(--surface); color: var(--text); border: 1px solid var(--border);">
+                    <!-- Populated via JS -->
+                  </select>
+                  
+                  <div id="importersComparisonContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem; padding-bottom: 1rem;">
+                    <!-- Comparison cards generated by JS -->
                   </div>
                 </div>
               </div>
@@ -440,13 +624,45 @@
                 </div>
                 <div class="panel__body" style="padding: 0;">
                   <table class="data-table">
-                    <thead><tr><th>المورد</th><th>المنتجات المعروضة</th><th>إجمالي الطلبات</th><th>إجمالي الإنفاق</th><th>الأدوية المورّدة</th><th>احتكار</th></tr></thead>
+                    <thead><tr><th>المورد</th><th>المنتجات المعروضة</th><th>الكمية الموردة</th><th>إجمالي الإنفاق</th><th>الأدوية المورّدة</th><th>احتكار</th></tr></thead>
                     <tbody id="impProfileAllBody"></tbody>
                   </table>
                 </div>
               </div>
             </div>
 
+          </div>
+
+          <!-- IMPORTER DETAILED PROFILE VIEW -->
+          <div id="analytics-view-importer-detailed-profile" class="analytics-view" style="display: none;">
+            <div class="section-header" style="margin-top:0; display: flex; align-items: center;">
+              <button class="btn-back" onclick="analyticsNavigate('importers-profile')" style="margin-left: 1rem;">🔙 رجوع لقائمة الموردين</button>
+              <div class="section-header__title" id="profileImporterName">ملف المورد</div>
+            </div>
+            <div class="pharmacy-dashboard-card" style="margin-bottom: 1.5rem; border-right-color: var(--primary);">
+              <div class="pharmacy-metric-details">
+                <span class="pharmacy-metric-label">العنوان: <strong id="profileImporterAddress"></strong> | الحالة: <strong id="profileImporterStatus"></strong></span>
+              </div>
+            </div>
+
+            <nav class="category-switcher" style="margin-bottom: 1rem;">
+              <button class="category-btn active" id="impProfileTabOffersBtn" onclick="switchImporterProfileTab('offers')">عروض المورد</button>
+              <button class="category-btn" id="impProfileTabOrdersBtn" onclick="switchImporterProfileTab('orders')">سجل الطلبات</button>
+            </nav>
+
+            <div id="imp-profile-tab-offers" class="profile-tab-content active">
+              <table class="data-table">
+                <thead><tr><th>الدواء</th><th>SKU</th><th>السعر</th><th>حالة العرض</th></tr></thead>
+                <tbody id="profileImporterOffersBody"></tbody>
+              </table>
+            </div>
+
+            <div id="imp-profile-tab-orders" class="profile-tab-content" style="display: none;">
+              <table class="data-table">
+                <thead><tr><th>تاريخ الاستلام</th><th>الجهة المستلمة</th><th>المنتج</th><th>الكمية</th><th>التكلفة التقديرية</th></tr></thead>
+                <tbody id="profileImporterOrdersBody"></tbody>
+              </table>
+            </div>
           </div>
 
           <!-- MEDICINES ANALYTICS VIEW -->
@@ -473,8 +689,10 @@
               <div class="panels" style="grid-template-columns: 1fr 1fr; gap: 1rem;">
                 <div class="panel fade-in" style="display: flex; flex-direction: column; align-items: center;">
                   <div class="panel__header" style="width: 100%;"><div class="panel__title">🍩 توزيع الصلاحية (Expiry Breakdown)</div></div>
-                  <div class="panel__body" style="width: 100%; max-width: 350px; padding: 1rem; position: relative;">
-                    <canvas id="medsExpiryDonutChart"></canvas>
+                  <div class="panel__body" style="width: 100%; max-width: 350px; padding: 1rem;">
+                    <div style="position: relative; width: 100%; height: 100%;">
+                      <canvas id="medsExpiryDonutChart"></canvas>
+                    </div>
                   </div>
                   <div id="medsExpiryLegend" style="display:flex; flex-wrap:wrap; gap:1rem; justify-content:center; padding: 0 1rem 1rem;"></div>
                 </div>
@@ -498,8 +716,10 @@
               <div class="panels" style="grid-template-columns: 3fr 2fr; gap: 1rem;">
                 <div class="panel fade-in">
                   <div class="panel__header"><div class="panel__title">📊 أعلى 10 أدوية طلباً (Fast Movers — آخر 90 يوم)</div></div>
-                  <div class="panel__body" style="padding: 1rem; position: relative; height: 380px;">
-                    <canvas id="medsFastMoversChart"></canvas>
+                  <div class="panel__body" style="padding: 1rem; height: 380px;">
+                    <div style="position: relative; width: 100%; height: 100%;">
+                      <canvas id="medsFastMoversChart"></canvas>
+                    </div>
                   </div>
                 </div>
                 <div class="panel fade-in">
@@ -615,8 +835,10 @@
             <div class="panels" style="grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem;">
               <div class="panel fade-in">
                 <div class="panel__header"><div class="panel__title">📈 تاريخ الأسعار (Price History)</div></div>
-                <div class="panel__body" style="padding: 1rem; position: relative; height: 300px;">
-                  <canvas id="medDetailPriceChart"></canvas>
+                <div class="panel__body" style="padding: 1rem; height: 300px;">
+                  <div style="position: relative; width: 100%; height: 100%;">
+                    <canvas id="medDetailPriceChart"></canvas>
+                  </div>
                 </div>
               </div>
               <div class="panel fade-in">
@@ -728,8 +950,15 @@
                   </div>
                   <div class="form-group">
                     <label>الفئة</label>
-                    <input type="text" name="category" required placeholder="مثال: مضادات حيوية">
+                    <select name="category" id="productCategorySelect" required onchange="handleCategoryChange(this)">
+                      <option value="" disabled selected>اختر الفئة...</option>
+                    </select>
                   </div>
+                  <div class="form-group" id="newCategoryGroup" style="display: none; margin-top: 0.5rem;">
+                    <label>اسم الفئة الجديدة</label>
+                    <input type="text" id="newCategoryInput" placeholder="ادخل اسم الفئة الجديدة...">
+                  </div>
+
 
                   <div class="form-group">
                     <label>ظروف التخزين</label>
@@ -988,7 +1217,7 @@
           </select>
         </div>
         <div class="form-group">
-          <label>الكمية المصروفة</label>
+          <label>الكمية المصروفة <span class="stock-indicator" style="color: var(--primary); font-size: 0.85rem; margin-right: 0.5rem; font-weight: normal; display: none;">(المخزون المتاح: <span class="stock-amount">0</span>)</span></label>
           <input type="number" name="quantity" min="1" required>
         </div>
         <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem; background: var(--danger);">تأكيد الصرف</button>
@@ -1068,7 +1297,7 @@
             </select>
           </div>
           <div class="form-group flex-1">
-            <label>الكمية</label>
+            <label>الكمية <span class="stock-indicator" style="color: var(--primary); font-size: 0.85rem; margin-right: 0.5rem; font-weight: normal; display: none;">(المخزون المتاح: <span class="stock-amount">0</span>)</span></label>
             <input type="number" name="quantity" min="1" required class="premium-input qty-pulse">
           </div>
         </div>

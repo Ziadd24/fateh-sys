@@ -2,7 +2,7 @@
  * Routes: /api/stock
  */
 const { Router } = require('express');
-const { asyncHandler, requireFields } = require('./middleware');
+const { asyncHandler, requireFields, requirePositiveInt } = require('./middleware');
 const {
   deductStock,
   transferStock,
@@ -23,22 +23,20 @@ const router = Router();
 
 router.post('/receive',
   requireFields('location_id', 'batch_no', 'quantity'),
+  requirePositiveInt('quantity'),
   asyncHandler((req, res) => {
     const { location_id, batch_no, quantity, reorder_point, note } = req.body;
-    const parsedQty = parseInt(quantity, 10);
-    if (isNaN(parsedQty) || parsedQty <= 0) return res.status(400).json({ success: false, error: 'Quantity must be a positive integer' });
-    const result = receiveStock(location_id, batch_no, parsedQty, parseInt(reorder_point || 0, 10), note);
+    const result = receiveStock(location_id, batch_no, quantity, parseInt(reorder_point || 0, 10), note);
     res.status(201).json(result);
   })
 );
 
 router.post('/deduct',
   requireFields('location_id', 'product_id', 'quantity'),
+  requirePositiveInt('quantity'),
   asyncHandler((req, res) => {
     const { location_id, product_id, quantity, specific_batch_no, note } = req.body;
-    const parsedQty = parseInt(quantity, 10);
-    if (isNaN(parsedQty) || parsedQty <= 0) return res.status(400).json({ success: false, error: 'Quantity must be a positive integer' });
-    const result = deductStock(location_id, product_id, parsedQty, specific_batch_no || null, note);
+    const result = deductStock(location_id, product_id, quantity, specific_batch_no || null, note);
 
     if (!result.success) {
       return res.status(409).json(result);
@@ -49,11 +47,10 @@ router.post('/deduct',
 
 router.post('/transfer',
   requireFields('from_location_id', 'to_location_id', 'product_id', 'quantity'),
+  requirePositiveInt('quantity'),
   asyncHandler((req, res) => {
     const { from_location_id, to_location_id, product_id, quantity, specific_batch_no, note } = req.body;
-    const parsedQty = parseInt(quantity, 10);
-    if (isNaN(parsedQty) || parsedQty <= 0) return res.status(400).json({ success: false, error: 'Quantity must be a positive integer' });
-    const result = transferStock(from_location_id, to_location_id, product_id, parsedQty, specific_batch_no || null, note);
+    const result = transferStock(from_location_id, to_location_id, product_id, quantity, specific_batch_no || null, note);
 
     if (!result.success) {
       return res.status(409).json(result);
@@ -178,6 +175,21 @@ router.get('/low', asyncHandler((req, res) => {
   const locationId = req.query.location_id ? parseInt(req.query.location_id, 10) : null;
   const rows = getLowStock(locationId);
   res.json(rows);
+}));
+
+router.put('/ignore-low', requireFields('location_id', 'batch_no'), asyncHandler((req, res) => {
+  const { location_id, batch_no } = req.body;
+  const db = require('../db/connection');
+  const result = db.prepare(`
+    UPDATE stock_level 
+    SET is_ignored = 1 
+    WHERE location_id = ? AND batch_no = ?
+  `).run(location_id, batch_no);
+
+  if (result.changes === 0) {
+    return res.status(404).json({ error: 'Stock record not found' });
+  }
+  res.json({ success: true });
 }));
 
 router.get('/suppliers', asyncHandler((req, res) => {

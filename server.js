@@ -30,7 +30,8 @@ try {
 }
 
 // ─── Global middleware ────────────────────────────────────────────────
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+const allowedOrigin = process.env.CORS_ORIGIN || `http://localhost:${PORT}`;
+app.use(cors({ origin: allowedOrigin }));
 app.use(express.json());
 
 // ─── Serve dashboard frontend ─────────────────────────────────────────

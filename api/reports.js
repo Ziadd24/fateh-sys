@@ -66,7 +66,24 @@ router.get('/pharmacy-dashboard', asyncHandler((req, res) => {
     ORDER BY b.expiry_date ASC, p.name ASC
   `).all();
 
-  // Query 4: List of top selling products in current calendar month at Pharmacy locations
+  // Query 4: List of top selling products with filters
+  const range = req.query.range || 'thisMonth';
+  const pharmacyId = req.query.pharmacy_id || '';
+  
+  let dateCondition = `sm.created_at >= date('now', 'start of month') AND sm.created_at < date('now', 'start of month', '+1 month')`;
+  if (range === 'lastWeek') {
+    dateCondition = `sm.created_at >= date('now', '-7 days')`;
+  } else if (range === 'lastMonth') {
+    dateCondition = `sm.created_at >= date('now', '-1 month')`;
+  }
+
+  let locationCondition = `l.type = 'Pharmacy'`;
+  const queryParams = [];
+  if (pharmacyId) {
+    locationCondition += ` AND l.location_id = ?`;
+    queryParams.push(pharmacyId);
+  }
+
   const topSellingProducts = db.prepare(`
     SELECT
       p.name AS product_name,
@@ -77,13 +94,12 @@ router.get('/pharmacy-dashboard', asyncHandler((req, res) => {
     JOIN product p ON b.product_id = p.product_id
     JOIN location l ON l.location_id = sm.from_location
     WHERE sm.movement = 'OUT'
-      AND l.type = 'Pharmacy'
-      AND sm.created_at >= date('now', 'start of month')
-      AND sm.created_at < date('now', 'start of month', '+1 month')
+      AND ${locationCondition}
+      AND ${dateCondition}
       AND (sm.reference_note IS NULL OR sm.reference_note NOT LIKE '[REVERSED]%')
     GROUP BY p.product_id, p.name, p.sku
     ORDER BY quantity_sold DESC, p.name ASC
-  `).all();
+  `).all(...queryParams);
 
   res.json({
     totalMonthlySales,
